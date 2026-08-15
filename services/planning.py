@@ -32,24 +32,35 @@ def _time(region: DemandNode, facility: Facility) -> float:
     )
 
 
-def _coverage_metrics(regions, facilities, populations, access_minutes):
+def _coverage_metrics(regions, facilities, populations, access_minutes, annual_demand=None):
     total_pop = sum(populations.values())
+    total_demand = sum(annual_demand.values()) if annual_demand else 0.0
     weighted_nearest = 0.0
+    demand_weighted_nearest = 0.0
     covered = 0
+    covered_demand = 0.0
     worst = 0.0
     region_access = {}
     for region in regions:
         nearest = min(_time(region, f) for f in facilities)
         pop = populations[region.id]
+        demand = annual_demand.get(region.id, 0.0) if annual_demand else 0.0
         weighted_nearest += pop * nearest
+        demand_weighted_nearest += demand * nearest
         if nearest <= access_minutes:
             covered += pop
+            covered_demand += demand
         worst = max(worst, nearest)
         region_access[region.id] = {"nearest_minutes": nearest, "covered": nearest <= access_minutes}
     return {
         "population_within_target": covered,
         "coverage_pct": 100 * covered / total_pop if total_pop else 0.0,
         "avg_nearest_minutes": weighted_nearest / total_pop if total_pop else 0.0,
+        "demand_within_target": covered_demand,
+        "demand_coverage_pct": 100 * covered_demand / total_demand if total_demand else 0.0,
+        "avg_demand_weighted_nearest_minutes": (
+            demand_weighted_nearest / total_demand if total_demand else 0.0
+        ),
         "worst_nearest_minutes": worst,
         "region_access": region_access,
     }
@@ -88,7 +99,13 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
     )
     accessibility = e2sfca_accessibility(regions, active_facilities, populations)
     equity = accessibility_equity(accessibility, populations)
-    coverage = _coverage_metrics(regions, active_facilities, populations, access_minutes)
+    coverage = _coverage_metrics(
+        regions,
+        active_facilities,
+        populations,
+        access_minutes,
+        annual_demand=annual_demand,
+    )
 
     facility_rows = []
     overload_count = 0
@@ -135,6 +152,9 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
             "coverage_pct": coverage["coverage_pct"],
             "population_within_target": coverage["population_within_target"],
             "avg_nearest_minutes": coverage["avg_nearest_minutes"],
+            "demand_coverage_pct": coverage["demand_coverage_pct"],
+            "demand_within_target": coverage["demand_within_target"],
+            "avg_demand_weighted_nearest_minutes": coverage["avg_demand_weighted_nearest_minutes"],
             "worst_nearest_minutes": coverage["worst_nearest_minutes"],
             "overloaded_facilities": overload_count,
             "access_equity_cv": equity["cv"],
@@ -158,12 +178,20 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
 def _objective_score(state: dict, objective: str) -> float:
     m = state["metrics"]
     if objective == "p_median":
-        return -m["avg_nearest_minutes"]
+        return -m["avg_demand_weighted_nearest_minutes"]
     if objective == "coverage":
-        return m["coverage_pct"] - 0.03 * m["avg_nearest_minutes"]
+        return m["demand_coverage_pct"] - 0.03 * m["avg_demand_weighted_nearest_minutes"]
     if objective == "equity":
         return -100 * m["access_equity_cv"] - 0.5 * m["worst_nearest_minutes"]
-    return 1.25 * m["coverage_pct"] - 0.55 * m["avg_nearest_minutes"] - 2.4 * m["worst_nearest_minutes"] - 8.0 * m["overloaded_facilities"] - 30.0 * m["access_equity_cv"]
+    return (
+        0.70 * m["coverage_pct"]
+        + 0.70 * m["demand_coverage_pct"]
+        - 0.35 * m["avg_nearest_minutes"]
+        - 0.45 * m["avg_demand_weighted_nearest_minutes"]
+        - 2.2 * m["worst_nearest_minutes"]
+        - 8.0 * m["overloaded_facilities"]
+        - 30.0 * m["access_equity_cv"]
+    )
 
 
 def _candidate_pool(regions: list[DemandNode], populations: dict[str, int], baseline: dict, max_candidates: int = 140) -> list[DemandNode]:
@@ -246,7 +274,9 @@ def optimize_site(regions, facilities, year, access_minutes, beds, annual_ed_cap
             "metrics": state["metrics"],
             "delta": {
                 "coverage_pct": state["metrics"]["coverage_pct"] - baseline["metrics"]["coverage_pct"],
+                "demand_coverage_pct": state["metrics"]["demand_coverage_pct"] - baseline["metrics"]["demand_coverage_pct"],
                 "avg_nearest_minutes": state["metrics"]["avg_nearest_minutes"] - baseline["metrics"]["avg_nearest_minutes"],
+                "avg_demand_weighted_nearest_minutes": state["metrics"]["avg_demand_weighted_nearest_minutes"] - baseline["metrics"]["avg_demand_weighted_nearest_minutes"],
                 "overloaded_facilities": state["metrics"]["overloaded_facilities"] - baseline["metrics"]["overloaded_facilities"],
                 "access_equity_cv": state["metrics"]["access_equity_cv"] - baseline["metrics"]["access_equity_cv"],
             },
