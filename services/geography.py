@@ -54,6 +54,7 @@ def routing_provider_name() -> str:
     return "precomputed_osrm_matrix" if MATRIX_FILE.exists() else "calibrated_geodesic_proxy"
 
 
+@lru_cache(maxsize=2_000_000)
 def travel_time_minutes(
     lat1: float,
     lon1: float,
@@ -73,4 +74,7 @@ def travel_time_minutes(
         value = _load_matrix().get(f"{origin_id}|{destination_id}")
         if value is not None:
             return value
-    return _proxy_travel_time(round(lat1, 6), round(lon1, 6), round(lat2, 6), round(lon2, 6))
+    # Demand-node and facility coordinates are stable values loaded from the
+    # dataset. Caching the complete lookup avoids recalculating the same route
+    # for gravity assignment, E2SFCA and coverage metrics during optimization.
+    return _proxy_travel_time(lat1, lon1, lat2, lon2)

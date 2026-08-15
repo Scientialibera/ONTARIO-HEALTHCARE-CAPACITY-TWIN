@@ -83,7 +83,15 @@ def _resolution(regions: list[DemandNode], demand_info=None) -> dict:
     return result
 
 
-def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per_capita=DEFAULT_ED_VISITS_PER_CAPITA, proposed=None):
+def build_state(
+    regions,
+    facilities,
+    year=2026,
+    access_minutes=30,
+    ed_visits_per_capita=DEFAULT_ED_VISITS_PER_CAPITA,
+    proposed=None,
+    include_regions=True,
+):
     active_facilities = list(facilities)
     if proposed is not None:
         active_facilities.append(proposed.as_facility())
@@ -138,19 +146,20 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
         facility_rows.append(row)
 
     region_rows = []
-    for r in regions:
-        row = asdict(r)
-        baseline = populations[r.id] * ed_visits_per_capita * SENTINEL_NETWORK_CAPTURE_SHARE
-        node_demand = annual_demand[r.id]
-        row.update({
-            "population": populations[r.id],
-            "annual_ed_demand": node_demand,
-            "demand_multiplier": node_demand / baseline if baseline > 0 else 1.0,
-            "accessibility_score": accessibility[r.id],
-            "nearest_minutes": nearest_times[r.id],
-            "within_target": coverage["region_access"][r.id]["covered"],
-        })
-        region_rows.append(row)
+    if include_regions:
+        for r in regions:
+            row = asdict(r)
+            baseline = populations[r.id] * ed_visits_per_capita * SENTINEL_NETWORK_CAPTURE_SHARE
+            node_demand = annual_demand[r.id]
+            row.update({
+                "population": populations[r.id],
+                "annual_ed_demand": node_demand,
+                "demand_multiplier": node_demand / baseline if baseline > 0 else 1.0,
+                "accessibility_score": accessibility[r.id],
+                "nearest_minutes": nearest_times[r.id],
+                "within_target": coverage["region_access"][r.id]["covered"],
+            })
+            region_rows.append(row)
 
     total_ed_demand = sum(annual_demand.values())
     proposed_assigned = loads.get("proposed", 0.0)
@@ -268,7 +277,7 @@ def optimize_site(regions, facilities, year, access_minutes, beds, annual_ed_cap
         pool,
         key=lambda r: _screen_score(r, regions, populations, baseline, access_minutes, objective),
         reverse=True,
-    )[:12]
+    )[:8]
 
     candidates = []
     for region in screened:
@@ -279,7 +288,15 @@ def optimize_site(regions, facilities, year, access_minutes, beds, annual_ed_cap
             planning_beds=beds,
             annual_ed_capacity=annual_ed_capacity,
         )
-        state = build_state(regions, facilities, year, access_minutes, ed_visits_per_capita, proposed)
+        state = build_state(
+            regions,
+            facilities,
+            year,
+            access_minutes,
+            ed_visits_per_capita,
+            proposed,
+            include_regions=False,
+        )
         candidates.append({
             "region_id": region.id,
             "name": region.name,

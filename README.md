@@ -83,10 +83,42 @@ uvicorn api.main:app --reload
 
 Open `http://127.0.0.1:8000`.
 
+## Use the planner
+
+1. Choose the planning horizon and access target in the left panel. The cards and map update from the public-data planning model.
+2. To test a facility location, select **Place new hospital**, then click anywhere on the map. The model recalculates allocation, access and stress for the facility capacity inputs shown in the **New facility scenario** panel.
+3. To find candidates, choose an optimization objective and select **Find best candidate sites**. The top five ranked sites appear in the left panel; select one to model it as a scenario.
+4. Use **Clear scenario** to return to the baseline before comparing another site.
+
+The optimizer evaluates all 15,855 demand nodes. A run normally completes in tens of seconds on a local development machine; the interface keeps the action state visible while it runs.
+
+## Screenshots
+
+Baseline province-wide capacity view:
+
+![Ontario Healthcare Capacity Twin dashboard](docs/screenshots/dashboard.png)
+
+Placed-facility scenario, including demand shifted and the scenario-impact panel:
+
+![Ontario Healthcare Capacity Twin placed-facility scenario](docs/screenshots/placed-facility.png)
+
 Local tests:
 
 ```bash
 pytest
+```
+
+The test suite includes browser-level Playwright coverage for dashboard load, map-based facility placement and optimization results. It uses a locally installed Chrome/Edge browser when available; otherwise install Playwright Chromium once:
+
+```bash
+python -m playwright install chromium
+pytest
+```
+
+To regenerate the README screenshots:
+
+```bash
+python scripts/capture_screenshots.py
 ```
 
 Docker:
@@ -206,7 +238,7 @@ demand pressure + poor-access screening
       ↓
 fast coverage/travel screen
       ↓
-12 full model evaluations
+8 full model evaluations
       ↓
 top 5 recommendations
 ```
