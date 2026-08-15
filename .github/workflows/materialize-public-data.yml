@@ -1,0 +1,43 @@
+name: Materialize public demand data
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/build_fine_grained_demand.py"
+      - "data/processed/regions.json"
+      - ".github/workflows/materialize-public-data.yml"
+
+jobs:
+  build-demand-layer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download official Statistics Canada GAF and build Ontario DA nodes
+        run: python scripts/build_fine_grained_demand.py
+      - name: Validate generated layer
+        run: |
+          python - <<'PY'
+          import gzip, json
+          with gzip.open('data/processed/demand_nodes_da.json.gz', 'rt', encoding='utf-8') as f:
+              rows=json.load(f)
+          meta=json.load(open('data/processed/demand_nodes_da.meta.json', encoding='utf-8'))
+          assert len(rows) > 10000, len(rows)
+          assert all(r['geography_level']=='DA' for r in rows)
+          assert meta['demand_nodes'] == len(rows)
+          for cd in meta['control_checks'].values():
+              assert cd['population_2025'] > 0
+              assert cd['population_2050_m1'] > 0
+          print(f"validated {len(rows):,} demand nodes")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ontario-da-demand-layer
+          path: |
+            data/processed/demand_nodes_da.json.gz
+            data/processed/demand_nodes_da.meta.json
+          retention-days: 7

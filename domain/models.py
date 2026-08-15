@@ -15,6 +15,12 @@ class DemandNode:
     lon: float
     population_2025: int
     population_2050_m1: int
+    population_2021: int | None = None
+    geography_level: str = "CD"
+    parent_id: str | None = None
+    parent_name: str | None = None
+    source_id: str | None = None
+    cd_uid: str | None = None
 
 
 @dataclass(frozen=True)

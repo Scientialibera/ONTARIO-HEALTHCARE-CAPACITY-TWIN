@@ -2,60 +2,66 @@
 
 A research-backed public-data digital twin for exploring **healthcare capacity, geographic access and new-facility location scenarios in Ontario**.
 
-The application is designed as a planning POC: it combines real public population data and real hospital locations with explicit, auditable planning models. It does **not** claim to reproduce patient-level clinical flows or predict individual healthcare use.
+The application combines real public population geography and real hospital locations with explicit planning models. It is a planning POC and does not claim to reproduce patient-level clinical flows or predict individual healthcare use.
+
+## Current model resolution
+
+The repository now supports a fine-grained Statistics Canada **dissemination-area demand layer**. The bundled runtime automatically uses `data/processed/demand_nodes_da.json.gz` when present and falls back to the original 17 census-division anchors when it is not present.
+
+The DA layer is generated from the 2021 Geographic Attribute File using real DA population and population-weighted representative coordinates. The 2021 spatial distribution is reconciled to the parent 2025 population estimates and 2050 M1 control totals. See `docs/FINE_GRAINED_DATA.md`.
 
 ## What it does
 
-- Maps a curated network of real Ontario acute-care hospital sites.
-- Uses **Statistics Canada 2025 census-division population estimates** and the **2050 M1 medium-growth projection**.
-- Interpolates planning-year population between 2025 and 2050.
-- Estimates major-centre ED-equivalent demand using a configurable all-ED utilization reference and an explicit sentinel-network capture share.
-- Allocates modeled demand to hospitals with a capacity-weighted **gravity / Huff model**.
+- Maps real Ontario acute-care hospital sites.
+- Uses Statistics Canada population anchors and 2050 M1 projections.
+- Models thousands of DA-level demand nodes when the fine-grained layer is bundled.
+- Estimates major-centre ED-equivalent demand using an explicit utilization coefficient and sentinel-network capture share.
+- Allocates modeled demand with a capacity-weighted **gravity / Huff model**.
 - Calculates spatial accessibility with **Enhanced Two-Step Floating Catchment Area (E2SFCA)**.
-- Evaluates candidate new-hospital locations using:
-  - **p-median**: minimize population-weighted travel time
-  - **MCLP / maximum coverage**: maximize population within a target travel time
-  - **p-center / equity**: reduce worst-case access
-  - **balanced multi-objective**: coverage + travel + system stress + access equity
-- Adds a queueing/capacity stress layer using **Erlang-C** and a seeded **Monte Carlo capacity-shock simulation**.
-- Lets an operator click anywhere on the map to place a proposed hospital and immediately recalculate system metrics.
+- Evaluates candidate hospital locations using:
+  - **p-median** — minimize population-weighted travel time
+  - **MCLP / maximum coverage** — maximize population within a target travel time
+  - **p-center / equity** — reduce worst-case access
+  - **balanced multi-objective** — coverage + travel + system stress + access equity
+- Adds an **Erlang-C** queue-pressure proxy and seeded **Monte Carlo** capacity-shock simulation.
+- Lets an operator place a proposed hospital anywhere on the map and recalculate system metrics.
+- Supports a precomputed **OSRM road travel-time matrix** while preserving a deterministic fallback for portable demos.
 
-## Product boundary
-
-The repository deliberately separates three types of information:
+## Data boundary
 
 | Type | Examples |
 |---|---|
-| **Observed public data** | StatsCan population estimates/projections, Ontario hospital sites, Ontario Health provincial ED benchmark |
-| **Planning model** | travel-time proxy, gravity assignment, E2SFCA, p-median/MCLP/p-center, queue stress |
-| **Capacity proxy** | facility-level planning beds / ED capacity where a current public facility-level value is not bundled |
+| **Observed public data** | StatsCan DA geography/population, StatsCan population anchors/projections, Ontario hospital sites, Ontario Health provincial ED benchmark |
+| **Planning model** | small-area growth disaggregation, gravity assignment, E2SFCA, p-median/MCLP/p-center, queue stress |
+| **Capacity proxy** | facility planning beds / ED capacity where current facility-level values are not bundled |
 
-A production deployment should replace capacity proxies with CIHI / hospital / Ontario Health data and replace the road-time proxy with an authoritative routing engine.
+A production deployment should ingest authoritative facility capacity/occupancy data and a maintained routing engine or road-time matrix.
 
 ## Architecture
 
 ```text
 api/
-  main.py                    FastAPI HTTP API + static app hosting
+  main.py                    FastAPI API + static app
 core/
   config.py                  modelling constants
 domain/
-  models.py                  demand and facility domain models
+  models.py                  demand/facility domain models
 services/
   accessibility.py           E2SFCA
-  allocation.py              gravity / Huff demand assignment
-  geography.py               travel-time proxy
-  planning.py                scenario state + location optimization
+  allocation.py              gravity / Huff assignment
+  geography.py               OSRM matrix adapter + fallback
+  planning.py                scenarios + scalable location optimization
   queueing.py                Erlang-C + Monte Carlo stress
-  data_repository.py         typed local data loading
+  data_repository.py         resolution-aware data loading
+scripts/
+  build_fine_grained_demand.py
+  build_osrm_matrix.py
 data/processed/
-  regions.json               StatsCan demand-region inputs
-  hospitals.json             real hospital sites + planning capacity fields
-  sources.json               data provenance
+  regions.json               parent CD control totals/fallback
+  demand_nodes_da.json.gz    fine-grained public demand layer
+  demand_nodes_da.meta.json  provenance/control checks
+  hospitals.json
 frontend/
-  index.html
-  assets/styles.css
-  js/app.js
 tests/
 docs/
 ```
@@ -73,7 +79,7 @@ uvicorn api.main:app --reload
 
 Open `http://127.0.0.1:8000`.
 
-Run tests:
+Tests:
 
 ```bash
 pytest
@@ -88,149 +94,100 @@ docker run --rm -p 8080:8080 ontario-healthcare-capacity-twin
 
 ## Public data
 
-### Population
+### Small-area geography
 
-**Statistics Canada Table 17-10-0152-01** — Population estimates, July 1, by census division, 2021 boundaries  
+**Statistics Canada 2021 Geographic Attribute File — 92-151-X**  
+https://www150.statcan.gc.ca/n1/en/catalogue/92-151-x
+
+The GAF includes DA population and population-weighted DA representative coordinates and is the source of the fine-grained spatial demand layer.
+
+### Population anchors and projections
+
+**Statistics Canada Table 17-10-0152-01** — Population estimates, July 1, by census division  
 https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710015201
 
-**Statistics Canada Table 17-10-0162-01** — Projected population for census divisions and census subdivisions, 2021 boundaries, by projection scenario, age and gender  
+**Statistics Canada Table 17-10-0162-01** — Projected population for census divisions and census subdivisions by projection scenario, age and gender  
 https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710016201
 
-Technical report:  
-https://www150.statcan.gc.ca/n1/pub/17-20-0003/172000032026003-eng.htm
-
-The public POC uses the M1 medium-growth scenario at 2050. Statistics Canada explicitly presents these outputs as projection scenarios rather than predictions.
+The public POC uses the M1 medium-growth scenario at 2050 as a parent control. Statistics Canada projection scenarios are not deterministic predictions.
 
 ### Hospital locations
 
 **Ontario Ministry of Health Service Provider Locations (MOHSERLO)**  
 https://data.ontario.ca/dataset/ministry-of-health-service-provider-locations-mohserlo
 
-The demo hospital sites correspond to real operating hospital locations. The full MOHSERLO dataset is the intended production ingestion source.
-
 ### ED / hospital performance references
 
 **Ontario Health — Time Spent in Emergency Departments**  
 https://www.ontariohealth.ca/system/reporting/performance/time-spent-in-emergency-departments
 
-The UI uses the January 2026 Ontario average wait to first assessment (1.7 h) only as a provincial benchmark.
-
 **CIHI Indicator Library**  
 https://www.cihi.ca/en/access-data-and-reports/indicator-library
 
-Relevant indicators include Number of Emergency Department Visits, Number of Acute Care Beds, Average Acute Occupancy Rate, Number of Acute Care Hospital Stays and ED wait-time indicators.
-
 ## Research basis
 
-The code is intentionally modular so each modelling component maps to a well-established line of healthcare operations research.
+The implementation maps to established healthcare operations-research methods:
 
-### Location-allocation
+- Luo W, Qi Y. *An enhanced two-step floating catchment area (E2SFCA) method for measuring spatial accessibility to primary care physicians*. Health & Place. DOI: 10.1016/j.healthplace.2009.06.002
+- Gao F, Jaffrelot M, Deguen S. *Measuring hospital spatial accessibility using E2SFCA*. BMC Health Services Research. DOI: 10.1186/s12913-021-07046-3
+- Wang F. *Measurement, Optimization, and Impact of Health Care Accessibility: A Methodological Review*.
+- Location-allocation literature using p-median, maximum coverage and center/equity models.
+- Hoot NR et al. *Forecasting Emergency Department Crowding: A Discrete Event Simulation*.
 
-- Wang F. *Measurement, Optimization, and Impact of Health Care Accessibility: A Methodological Review*. International Journal of Environmental Research and Public Health.  
-  https://pmc.ncbi.nlm.nih.gov/articles/PMC3547595/
-- Rahman S, Smith DK. *Use of location-allocation models in health service development planning in developing nations*. European Journal of Operational Research.
-- Location-allocation and accessibility planning implementation using p-median and maximum-coverage models:  
-  https://pmc.ncbi.nlm.nih.gov/articles/PMC4361743/
-- Preventive healthcare facility location review covering p-median, covering and center models:  
-  https://pmc.ncbi.nlm.nih.gov/articles/PMC3161374/
-- Two-step optimization combining new facility location with accessibility-equity capacity adjustment:  
-  https://pmc.ncbi.nlm.nih.gov/articles/PMC5412212/
+See `docs/RESEARCH.md` for references and model limitations.
 
-### Accessibility
+## Fine-grained optimizer
 
-- Luo W, Qi Y. *An enhanced two-step floating catchment area (E2SFCA) method for measuring spatial accessibility to primary care physicians*. Health & Place. 2009. DOI: 10.1016/j.healthplace.2009.06.002  
-  https://pubmed.ncbi.nlm.nih.gov/19576837/
-- Gao F, Jaffrelot M, Deguen S. *Measuring hospital spatial accessibility using the enhanced two-step floating catchment area method...*. BMC Health Services Research. 2021. DOI: 10.1186/s12913-021-07046-3  
-  https://pubmed.ncbi.nlm.nih.gov/34635117/
-- Multi-modal 2SFCA accessibility: DOI 10.1016/j.healthplace.2015.11.007  
-  https://pubmed.ncbi.nlm.nih.gov/26798964/
-- Ontario-specific hospital geographic access study using capacity and 30/60/120-minute catchments:  
-  https://pmc.ncbi.nlm.nih.gov/articles/PMC7845691/
-
-### ED / capacity simulation
-
-- Hoot NR et al. *Forecasting Emergency Department Crowding: A Discrete Event Simulation*. Annals of Emergency Medicine.  
-  https://pmc.ncbi.nlm.nih.gov/articles/PMC7252622/
-- ED discrete-event simulation literature motivates non-stationary arrivals, resource-constrained patient flow, waiting and boarding measures.
-- Erlang-C is used here only as a compact queue-stress proxy, not as a clinical wait-time forecast.
-
-## Modelling details
-
-### Population
-
-For demand region `i` and planning year `y`:
+Evaluating a full E2SFCA/capacity simulation at every DA candidate is unnecessary. The optimizer therefore uses a transparent two-stage process:
 
 ```text
-P(i,y) = P(i,2025) + ((y - 2025) / 25) × (P(i,2050,M1) - P(i,2025))
+all DA demand nodes
+      ↓
+high-population + poor-access screening
+      ↓
+≤ 140 geographically diverse candidates
+      ↓
+fast access/coverage screen
+      ↓
+12 full model evaluations
+      ↓
+top 5 recommendations
 ```
 
-This is an intentionally transparent interpolation between two public anchor points.
+The complete demand layer still participates in every final objective calculation.
 
-### Demand
+## Real road travel time
 
-The POC starts with an all-ED utilization reference of `0.39 visits/person/year`, approximately consistent with Canadian total reported ED visits divided by population. Because the bundled hospital layer is a **sentinel network of major sites rather than every Ontario ED**, 30% of system demand is assigned to the modeled network.
+The runtime looks for `data/processed/travel_matrix.json.gz`. Generate it against a local/self-hosted OSRM instance:
 
-Both values are explicit planning assumptions and should be calibrated with Ontario-specific facility data in production.
+```bash
+python scripts/build_osrm_matrix.py --base-url http://127.0.0.1:5000
+```
 
-### Gravity assignment
+OSRM's Table service returns fastest-route duration matrices. Statistics Canada's Road Network File is deliberately not used as a routing engine because its reference guide states that it lacks one-way, dead-end and obstacle information required for route optimization.
 
-For demand node `i` and facility `j`:
+When no matrix exists, the app labels its routing provider `calibrated_geodesic_proxy`. Proposed arbitrary sites also use the fallback because they are not precomputed matrix destinations.
+
+## API
 
 ```text
-attractiveness(i,j) =
-    capacity(j)^0.72 × exp(-0.047 × travel_minutes(i,j))
+GET  /api/health
+GET  /api/sources
+GET  /api/data-resolution
+GET  /api/state
+POST /api/scenario
+POST /api/optimize
 ```
 
-Demand is distributed proportionally to attractiveness. The exponent and decay coefficient are model parameters, not empirical patient-choice coefficients.
+`/api/state` includes a `data_resolution` object containing geography level, demand-node count, fine-grained status and the active routing provider.
 
-### E2SFCA
+## Modelling limitations
 
-The implementation follows the two-step structure:
-
-1. For every hospital, calculate supply-to-weighted-demand within a distance-decay catchment.
-2. For every population node, sum reachable hospital supply ratios with travel-time decay.
-
-POC distance-decay weights:
-
-| Travel time | Weight |
-|---|---:|
-| 0–15 min | 1.00 |
-| 15–30 min | 0.68 |
-| 30–60 min | 0.22 |
-| 60–120 min | 0.05 |
-
-### Travel time
-
-The public POC uses geodesic distance, a road-distance multiplier, speed bands and local-access overhead. This keeps the model completely reproducible without a paid API.
-
-Production: replace `services/geography.py::travel_time_minutes` with OSRM, GraphHopper, Valhalla, Google Routes, HERE, TomTom or an authoritative provincial network model.
-
-### Queue stress
-
-`services/queueing.py` contains:
-
-- Erlang-C `M/M/c` waiting approximation
-- seeded 240–500 iteration capacity-shock Monte Carlo
-- probability of modeled daily capacity breach
-- 95th percentile daily load ratio
-
-These outputs are labelled **stress proxies** because EDs violate stationary M/M/c assumptions through triage, priority classes, boarding and time-varying staffing.
-
-## Next production steps
-
-1. Ingest the complete MOHSERLO hospital layer.
-2. Bulk-ingest CIHI facility/corporation indicators.
-3. Add Statistics Canada dissemination-area/CSD demand resolution and age structure.
-4. Replace road-time proxy with multi-modal network travel times.
-5. Calibrate patient-choice gravity coefficients to patient-origin or FSA flow data.
-6. Replace capacity proxy with acute beds, ED treatment spaces, staffing, occupancy and hourly arrival profiles.
-7. Add a true non-homogeneous Poisson discrete-event ED simulator.
-8. Add capital cost, land-use, development timing and workforce constraints.
-9. Add uncertainty intervals around population, utilization and facility-capacity scenarios.
-
-## Disclaimer
-
-This software is an analytical planning demonstration. It is not a clinical decision-support system, hospital operations system, medical device or official Ontario healthcare planning model. Model outputs should not be used for clinical, emergency or capital decisions without validation against authoritative local data.
+- DA 2050 values are a transparent allocation of parent M1 controls, not official DA forecasts.
+- Gravity/Huff coefficients are planning parameters until calibrated to patient-origin data.
+- Capacity values remain planning proxies where authoritative facility-level data is not bundled.
+- Erlang-C is a stress indicator. Decision-grade ED operations require stage-level discrete-event simulation.
+- A routing matrix built from OSRM/OpenStreetMap is network-realistic but still does not represent live congestion unless traffic-aware speeds are supplied.
 
 ## License
 

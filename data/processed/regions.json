@@ -1,138 +1,19 @@
 [
-  {
-    "id": "toronto",
-    "name": "Toronto",
-    "lat": 43.6532,
-    "lon": -79.3832,
-    "population_2025": 3271830,
-    "population_2050_m1": 3901381
-  },
-  {
-    "id": "peel",
-    "name": "Peel",
-    "lat": 43.7315,
-    "lon": -79.7624,
-    "population_2025": 1632557,
-    "population_2050_m1": 1673899
-  },
-  {
-    "id": "york",
-    "name": "York",
-    "lat": 44.005,
-    "lon": -79.46,
-    "population_2025": 1299177,
-    "population_2050_m1": 1416134
-  },
-  {
-    "id": "durham",
-    "name": "Durham",
-    "lat": 44.05,
-    "lon": -78.9,
-    "population_2025": 810075,
-    "population_2050_m1": 1065836
-  },
-  {
-    "id": "halton",
-    "name": "Halton",
-    "lat": 43.5183,
-    "lon": -79.8774,
-    "population_2025": 666454,
-    "population_2050_m1": 774699
-  },
-  {
-    "id": "hamilton",
-    "name": "Hamilton",
-    "lat": 43.2557,
-    "lon": -79.8711,
-    "population_2025": 640465,
-    "population_2050_m1": 747356
-  },
-  {
-    "id": "waterloo",
-    "name": "Waterloo",
-    "lat": 43.4516,
-    "lon": -80.4925,
-    "population_2025": 711457,
-    "population_2050_m1": 990244
-  },
-  {
-    "id": "niagara",
-    "name": "Niagara",
-    "lat": 43.0896,
-    "lon": -79.0849,
-    "population_2025": 551128,
-    "population_2050_m1": 701359
-  },
-  {
-    "id": "wellington",
-    "name": "Wellington",
-    "lat": 43.5448,
-    "lon": -80.2482,
-    "population_2025": 267650,
-    "population_2050_m1": 298349
-  },
-  {
-    "id": "simcoe",
-    "name": "Simcoe",
-    "lat": 44.3894,
-    "lon": -79.6903,
-    "population_2025": 611297,
-    "population_2050_m1": 768890
-  },
-  {
-    "id": "brant",
-    "name": "Brant",
-    "lat": 43.1394,
-    "lon": -80.2644,
-    "population_2025": 177094,
-    "population_2050_m1": 239085
-  },
-  {
-    "id": "middlesex",
-    "name": "Middlesex",
-    "lat": 42.9849,
-    "lon": -81.2453,
-    "population_2025": 584933,
-    "population_2050_m1": 731932
-  },
-  {
-    "id": "essex",
-    "name": "Essex",
-    "lat": 42.3149,
-    "lon": -83.0364,
-    "population_2025": 489176,
-    "population_2050_m1": 586192
-  },
-  {
-    "id": "ottawa",
-    "name": "Ottawa",
-    "lat": 45.4215,
-    "lon": -75.6972,
-    "population_2025": 1188114,
-    "population_2050_m1": 1566946
-  },
-  {
-    "id": "frontenac",
-    "name": "Frontenac",
-    "lat": 44.2312,
-    "lon": -76.486,
-    "population_2025": 180952,
-    "population_2050_m1": 195662
-  },
-  {
-    "id": "sudbury",
-    "name": "Greater Sudbury",
-    "lat": 46.4917,
-    "lon": -80.993,
-    "population_2025": 188645,
-    "population_2050_m1": 219111
-  },
-  {
-    "id": "thunder-bay",
-    "name": "Thunder Bay",
-    "lat": 48.3809,
-    "lon": -89.2477,
-    "population_2025": 157958,
-    "population_2050_m1": 145231
-  }
+  {"id":"toronto","name":"Toronto","cd_uid":"3520","lat":43.6532,"lon":-79.3832,"population_2025":3271830,"population_2050_m1":3901381,"geography_level":"CD"},
+  {"id":"peel","name":"Peel","cd_uid":"3521","lat":43.7315,"lon":-79.7624,"population_2025":1632557,"population_2050_m1":1673899,"geography_level":"CD"},
+  {"id":"york","name":"York","cd_uid":"3519","lat":44.005,"lon":-79.46,"population_2025":1299177,"population_2050_m1":1416134,"geography_level":"CD"},
+  {"id":"durham","name":"Durham","cd_uid":"3518","lat":44.05,"lon":-78.9,"population_2025":810075,"population_2050_m1":1065836,"geography_level":"CD"},
+  {"id":"halton","name":"Halton","cd_uid":"3524","lat":43.5183,"lon":-79.8774,"population_2025":666454,"population_2050_m1":774699,"geography_level":"CD"},
+  {"id":"hamilton","name":"Hamilton","cd_uid":"3525","lat":43.2557,"lon":-79.8711,"population_2025":640465,"population_2050_m1":747356,"geography_level":"CD"},
+  {"id":"waterloo","name":"Waterloo","cd_uid":"3530","lat":43.4516,"lon":-80.4925,"population_2025":711457,"population_2050_m1":990244,"geography_level":"CD"},
+  {"id":"niagara","name":"Niagara","cd_uid":"3526","lat":43.0896,"lon":-79.0849,"population_2025":551128,"population_2050_m1":701359,"geography_level":"CD"},
+  {"id":"wellington","name":"Wellington","cd_uid":"3523","lat":43.5448,"lon":-80.2482,"population_2025":267650,"population_2050_m1":298349,"geography_level":"CD"},
+  {"id":"simcoe","name":"Simcoe","cd_uid":"3543","lat":44.3894,"lon":-79.6903,"population_2025":611297,"population_2050_m1":768890,"geography_level":"CD"},
+  {"id":"brant","name":"Brant","cd_uid":"3529","lat":43.1394,"lon":-80.2644,"population_2025":177094,"population_2050_m1":239085,"geography_level":"CD"},
+  {"id":"middlesex","name":"Middlesex","cd_uid":"3539","lat":42.9849,"lon":-81.2453,"population_2025":584933,"population_2050_m1":731932,"geography_level":"CD"},
+  {"id":"essex","name":"Essex","cd_uid":"3537","lat":42.3149,"lon":-83.0364,"population_2025":489176,"population_2050_m1":586192,"geography_level":"CD"},
+  {"id":"ottawa","name":"Ottawa","cd_uid":"3506","lat":45.4215,"lon":-75.6972,"population_2025":1188114,"population_2050_m1":1566946,"geography_level":"CD"},
+  {"id":"frontenac","name":"Frontenac","cd_uid":"3510","lat":44.2312,"lon":-76.486,"population_2025":180952,"population_2050_m1":195662,"geography_level":"CD"},
+  {"id":"sudbury","name":"Greater Sudbury","cd_uid":"3553","lat":46.4917,"lon":-80.993,"population_2025":188645,"population_2050_m1":219111,"geography_level":"CD"},
+  {"id":"thunder-bay","name":"Thunder Bay","cd_uid":"3558","lat":48.3809,"lon":-89.2477,"population_2025":157958,"population_2050_m1":145231,"geography_level":"CD"}
 ]

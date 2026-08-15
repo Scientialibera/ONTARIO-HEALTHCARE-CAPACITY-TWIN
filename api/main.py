@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,13 +7,14 @@ from pydantic import BaseModel, Field
 
 from core.config import DEFAULT_ACCESS_TARGET_MINUTES, DEFAULT_ED_VISITS_PER_CAPITA, FRONTEND_DIR
 from domain.models import ScenarioFacility
-from services.data_repository import load_facilities, load_regions, load_sources
+from services.data_repository import load_demand_metadata, load_facilities, load_regions, load_sources
+from services.geography import routing_provider_name
 from services.planning import build_state, optimize_site
 
 
 app = FastAPI(
     title="Ontario Healthcare Capacity Twin",
-    version="0.1.0",
+    version="0.2.0",
     description="Research-backed public-data planning POC for healthcare capacity and facility location.",
 )
 
@@ -41,12 +40,20 @@ class OptimizeRequest(BaseModel):
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "model": "Ontario Healthcare Capacity Twin"}
+    return {"status": "ok", "model": "Ontario Healthcare Capacity Twin", "version": "0.2.0"}
 
 
 @app.get("/api/sources")
 def sources() -> dict:
     return load_sources()
+
+
+@app.get("/api/data-resolution")
+def data_resolution() -> dict:
+    meta = dict(load_demand_metadata())
+    meta["routing_provider"] = routing_provider_name()
+    meta["hospital_sites"] = len(load_facilities())
+    return meta
 
 
 @app.get("/api/state")

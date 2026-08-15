@@ -1,65 +1,32 @@
-# Data provenance
+# Data sources and provenance
 
-## Statistics Canada
+## Runtime resolution
 
-### 2025 population
-Table 17-10-0152-01, population estimates by census division.
+The runtime prefers `data/processed/demand_nodes_da.json.gz` and falls back to `regions.json` when the fine-grained layer is absent. `/api/data-resolution` reports which layer and routing provider are active.
 
-Bundled exact 2025 values include Toronto, Peel, York, Durham, Halton, Hamilton, Waterloo, Niagara, Wellington, Simcoe, Brant, Middlesex, Essex, Ottawa, Frontenac, Greater Sudbury and Thunder Bay.
+## Statistics Canada dissemination areas
 
-Source:
-https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710015201
+Source: 2021 Geographic Attribute File (GAF), catalogue 92-151-X.
 
-### 2050 population
-Table 17-10-0162-01, projected population by census division/subdivision and scenario.
+The GAF is a dissemination-block-level file that includes the full standard geography hierarchy. It also includes DA population and DA representative-point latitude/longitude. Statistics Canada describes the representative points as population-weighted.
 
-The app uses the **M1 medium-growth** 2050 value for each demand region.
+The materializer keeps one populated DA record within each of the 17 census divisions covered by this POC.
 
-Source:
-https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710016201
+`population_2021` is observed Census population. `population_2025` and `population_2050_m1` are derived planning values that allocate each parent census division's control total according to the DA 2021 population distribution. Integer reconciliation guarantees exact parent totals. These derived values are not official StatsCan DA forecasts.
 
-Technical report:
-https://www150.statcan.gc.ca/n1/pub/17-20-0003/172000032026003-eng.htm
+## Hospital sites
 
-## Ontario hospital sites
+Hospital coordinates in `hospitals.json` correspond to real Ontario operating hospital sites. Capacity fields are explicitly labelled planning proxies where authoritative current facility-level values are not bundled.
 
-The Ministry of Health Service Provider Locations (MOHSERLO) is the authoritative open geospatial source identified for full hospital location ingestion:
+## Travel time
 
-https://data.ontario.ca/dataset/ministry-of-health-service-provider-locations-mohserlo
+The app supports `precomputed_osrm_matrix` and `calibrated_geodesic_proxy`. Statistics Canada's Road Network File is not used for route optimization because its reference guide states that the product omits one-way streets, dead ends and other obstacles required for routing.
 
-The POC bundles a curated subset of major real hospital sites to keep the repository small and immediately runnable.
+## Reproducibility
 
-## Hospital capacity fields
+```bash
+python scripts/build_fine_grained_demand.py
+python scripts/build_osrm_matrix.py --base-url http://127.0.0.1:5000
+```
 
-`planning_beds` and `annual_ed_capacity` are **model inputs**.
-
-A capacity field is marked using `capacity_basis`:
-
-- `observed_beds_proxy_ed`: bed count is sourced; ED capacity is a model proxy.
-- `observed_historical_beds_proxy_ed`: historical public bed count used as an anchor; ED capacity is a proxy.
-- `planning_proxy`: both fields are planning proxies.
-- `scenario_input`: user-entered proposed facility.
-
-This prevents a common analytical error: presenting an estimated planning capacity as an official hospital statistic.
-
-## CIHI
-
-CIHI's Indicator Library defines and publishes facility/corporation indicators needed for a production calibration:
-
-- Number of Emergency Department Visits
-- Number of Acute Care Beds
-- Average Acute Occupancy Rate
-- Number of Acute Care Hospital Stays
-- ED Wait Time for Physician Initial Assessment
-- Total Time Spent in ED for Admitted Patients
-
-https://www.cihi.ca/en/access-data-and-reports/indicator-library
-
-CIHI notes that some multi-site organizations report at corporation rather than individual-site level. A production ETL must preserve that reporting grain.
-
-## Ontario Health
-
-Provincial ED performance:
-https://www.ontariohealth.ca/system/reporting/performance/time-spent-in-emergency-departments
-
-The app displays the January 2026 Ontario average wait to first assessment (1.7 h) as a benchmark only.
+The GitHub Actions `Materialize public demand data` workflow independently downloads the official GAF and publishes the generated DA files as a workflow artifact.

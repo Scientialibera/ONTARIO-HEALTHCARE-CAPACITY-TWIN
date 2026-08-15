@@ -25,6 +25,8 @@ Thumbs.db
 credentials*.json
 service-account*.json
 
-# Local generated data
+# Local generated/source data
 data/raw/
 data/cache/
+data/processed/travel_matrix.json.gz
+2021_92-151_X.zip

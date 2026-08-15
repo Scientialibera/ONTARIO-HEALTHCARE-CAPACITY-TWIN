@@ -6,7 +6,7 @@ from core.config import DEFAULT_ED_VISITS_PER_CAPITA, SENTINEL_NETWORK_CAPTURE_S
 from domain.models import DemandNode, Facility, ScenarioFacility
 from services.accessibility import accessibility_equity, e2sfca_accessibility
 from services.allocation import gravity_assign, load_ratio
-from services.geography import travel_time_minutes
+from services.geography import routing_provider_name, travel_time_minutes
 from services.queueing import monte_carlo_capacity_risk, queue_stress_proxy
 
 
@@ -20,6 +20,17 @@ def populations_for_year(regions: list[DemandNode], year: int) -> dict[str, int]
     return {r.id: projected_population(r, year) for r in regions}
 
 
+def _time(region: DemandNode, facility: Facility) -> float:
+    return travel_time_minutes(
+        region.lat,
+        region.lon,
+        facility.lat,
+        facility.lon,
+        origin_id=region.id,
+        destination_id=facility.id,
+    )
+
+
 def _coverage_metrics(regions, facilities, populations, access_minutes):
     total_pop = sum(populations.values())
     weighted_nearest = 0.0
@@ -27,8 +38,7 @@ def _coverage_metrics(regions, facilities, populations, access_minutes):
     worst = 0.0
     region_access = {}
     for region in regions:
-        times = [travel_time_minutes(region.lat, region.lon, f.lat, f.lon) for f in facilities]
-        nearest = min(times)
+        nearest = min(_time(region, f) for f in facilities)
         pop = populations[region.id]
         weighted_nearest += pop * nearest
         if nearest <= access_minutes:
@@ -41,6 +51,16 @@ def _coverage_metrics(regions, facilities, populations, access_minutes):
         "avg_nearest_minutes": weighted_nearest / total_pop if total_pop else 0.0,
         "worst_nearest_minutes": worst,
         "region_access": region_access,
+    }
+
+
+def _resolution(regions: list[DemandNode]) -> dict:
+    level = regions[0].geography_level if regions else "unknown"
+    return {
+        "geography_level": level,
+        "demand_nodes": len(regions),
+        "fine_grained": level.upper() == "DA",
+        "routing_provider": routing_provider_name(),
     }
 
 
@@ -89,6 +109,7 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
         "access_minutes": access_minutes,
         "ed_visits_per_capita": ed_visits_per_capita,
         "sentinel_network_capture_share": SENTINEL_NETWORK_CAPTURE_SHARE,
+        "data_resolution": _resolution(regions),
         "metrics": {
             "population": sum(populations.values()),
             "annual_ed_demand": total_ed_demand,
@@ -105,11 +126,11 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
         "facilities": facility_rows,
         "equity": equity,
         "methodology": {
-            "population": "StatsCan 2025 estimate -> 2050 M1 linear interpolation",
+            "population": "StatsCan DA spatial distribution with 2025 -> 2050 M1 parent-control interpolation when fine-grained data is bundled",
             "demand": "projected population × ED visits coefficient × 30% sentinel-network capture share",
             "assignment": "capacity-weighted exponential gravity/Huff model",
             "accessibility": "enhanced two-step floating catchment area (E2SFCA)",
-            "travel": "haversine road-time proxy; replaceable with routing engine",
+            "travel": "precomputed network matrix when available; otherwise calibrated haversine road-time proxy",
             "queue": "Erlang-C + seeded Monte Carlo stress proxy",
         },
     }
@@ -123,14 +144,74 @@ def _objective_score(state: dict, objective: str) -> float:
         return m["coverage_pct"] - 0.03 * m["avg_nearest_minutes"]
     if objective == "equity":
         return -100 * m["access_equity_cv"] - 0.5 * m["worst_nearest_minutes"]
-    return (1.25 * m["coverage_pct"] - 0.55 * m["avg_nearest_minutes"] - 2.4 * m["worst_nearest_minutes"] - 8.0 * m["overloaded_facilities"] - 30.0 * m["access_equity_cv"])
+    return 1.25 * m["coverage_pct"] - 0.55 * m["avg_nearest_minutes"] - 2.4 * m["worst_nearest_minutes"] - 8.0 * m["overloaded_facilities"] - 30.0 * m["access_equity_cv"]
+
+
+def _candidate_pool(regions: list[DemandNode], populations: dict[str, int], baseline: dict, max_candidates: int = 140) -> list[DemandNode]:
+    """Build a diverse high-impact candidate pool before exact evaluation."""
+    nearest = {r["id"]: r["nearest_minutes"] for r in baseline["regions"]}
+    ranked = sorted(
+        regions,
+        key=lambda r: populations[r.id] * (1.0 + min(nearest.get(r.id, 0.0), 120.0) / 30.0),
+        reverse=True,
+    )
+    chosen: list[DemandNode] = []
+    per_parent: dict[str, int] = {}
+    per_parent_cap = 16 if len(regions) > 500 else max_candidates
+    for region in ranked:
+        parent = region.parent_id or region.id
+        if per_parent.get(parent, 0) >= per_parent_cap:
+            continue
+        chosen.append(region)
+        per_parent[parent] = per_parent.get(parent, 0) + 1
+        if len(chosen) >= max_candidates:
+            break
+    return chosen
+
+
+def _screen_score(candidate: DemandNode, regions: list[DemandNode], populations: dict[str, int], baseline: dict, access_minutes: int, objective: str) -> float:
+    baseline_times = {r["id"]: r["nearest_minutes"] for r in baseline["regions"]}
+    total_pop = sum(populations.values()) or 1
+    weighted = 0.0
+    covered = 0
+    worst = 0.0
+    for region in regions:
+        candidate_time = travel_time_minutes(region.lat, region.lon, candidate.lat, candidate.lon)
+        nearest = min(baseline_times[region.id], candidate_time)
+        pop = populations[region.id]
+        weighted += pop * nearest
+        covered += pop if nearest <= access_minutes else 0
+        worst = max(worst, nearest)
+    avg = weighted / total_pop
+    coverage = 100 * covered / total_pop
+    if objective == "p_median":
+        return -avg
+    if objective == "coverage":
+        return coverage - 0.03 * avg
+    if objective == "equity":
+        return -worst - 0.12 * avg
+    return 1.25 * coverage - 0.60 * avg - 1.0 * worst
 
 
 def optimize_site(regions, facilities, year, access_minutes, beds, annual_ed_capacity, objective="balanced", ed_visits_per_capita=DEFAULT_ED_VISITS_PER_CAPITA):
     baseline = build_state(regions, facilities, year, access_minutes, ed_visits_per_capita)
+    populations = populations_for_year(regions, year)
+    pool = _candidate_pool(regions, populations, baseline)
+    screened = sorted(
+        pool,
+        key=lambda r: _screen_score(r, regions, populations, baseline, access_minutes, objective),
+        reverse=True,
+    )[:12]
+
     candidates = []
-    for region in regions:
-        proposed = ScenarioFacility(lat=region.lat, lon=region.lon, name=f"Proposed {region.name} acute-care site", planning_beds=beds, annual_ed_capacity=annual_ed_capacity)
+    for region in screened:
+        proposed = ScenarioFacility(
+            lat=region.lat,
+            lon=region.lon,
+            name=f"Proposed {region.parent_name or region.name} acute-care site",
+            planning_beds=beds,
+            annual_ed_capacity=annual_ed_capacity,
+        )
         state = build_state(regions, facilities, year, access_minutes, ed_visits_per_capita, proposed)
         candidates.append({
             "region_id": region.id,
@@ -147,4 +228,10 @@ def optimize_site(regions, facilities, year, access_minutes, beds, annual_ed_cap
             },
         })
     candidates.sort(key=lambda x: x["score"], reverse=True)
-    return {"objective": objective, "baseline": baseline["metrics"], "recommendations": candidates[:5]}
+    return {
+        "objective": objective,
+        "baseline": baseline["metrics"],
+        "candidate_pool": len(pool),
+        "full_evaluations": len(screened),
+        "recommendations": candidates[:5],
+    }
