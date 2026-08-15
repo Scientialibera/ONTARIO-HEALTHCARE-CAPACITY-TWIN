@@ -10,39 +10,61 @@ from domain.models import DemandNode, Facility
 
 FINE_DEMAND_FILE = DATA_DIR / "demand_nodes_da.json.gz"
 FINE_DEMAND_META = DATA_DIR / "demand_nodes_da.meta.json"
+AGE_PROFILE_FILE = DATA_DIR / "age_profiles_da.json.gz"
+AGE_PROFILE_META = DATA_DIR / "age_profiles_da.meta.json"
 
 
 def _read_json(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _read_json_gz(path):
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
 @lru_cache(maxsize=1)
 def load_regions() -> list[DemandNode]:
-    """Load the highest-resolution bundled demand layer.
-
-    A materialized Statistics Canada dissemination-area layer is preferred.
-    The original census-division anchors remain a deterministic fallback so
-    the repository runs even before the public-data materialization step.
-    """
+    """Load the highest-resolution bundled demand layer and optional age profile."""
     if FINE_DEMAND_FILE.exists():
-        with gzip.open(FINE_DEMAND_FILE, "rt", encoding="utf-8") as handle:
-            rows = json.load(handle)
+        rows = _read_json_gz(FINE_DEMAND_FILE)
     else:
         rows = _read_json(DATA_DIR / "regions.json")
+
+    if AGE_PROFILE_FILE.exists():
+        age_profiles = _read_json_gz(AGE_PROFILE_FILE)
+        for row in rows:
+            source_id = row.get("source_id")
+            profile = age_profiles.get(source_id) if source_id else None
+            if profile:
+                row.update(profile)
+
     return [DemandNode(**row) for row in rows]
 
 
 @lru_cache(maxsize=1)
 def load_demand_metadata() -> dict:
     if FINE_DEMAND_FILE.exists() and FINE_DEMAND_META.exists():
-        return _read_json(FINE_DEMAND_META)
-    rows = load_regions()
-    return {
-        "geography_level": rows[0].geography_level if rows else "unknown",
-        "demand_nodes": len(rows),
-        "source": "Bundled census-division fallback",
-        "fine_grained": False,
-    }
+        meta = _read_json(FINE_DEMAND_META)
+    else:
+        rows = load_regions()
+        meta = {
+            "geography_level": rows[0].geography_level if rows else "unknown",
+            "demand_nodes": len(rows),
+            "source": "Bundled census-division fallback",
+            "fine_grained": False,
+        }
+
+    if AGE_PROFILE_FILE.exists() and AGE_PROFILE_META.exists():
+        meta = dict(meta)
+        meta["age_profile"] = _read_json(AGE_PROFILE_META)
+    else:
+        meta = dict(meta)
+        meta["age_profile"] = {
+            "bundled": False,
+            "source": "Statistics Canada 2021 Census Profile",
+        }
+    return meta
 
 
 @lru_cache(maxsize=1)
