@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ontario Healthcare Capacity Twin</title>
+  <meta name="description" content="Research-backed public-data healthcare capacity planning and facility-location digital twin for Ontario." />
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="/assets/styles.css?v=1" />
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand-block">
+      <div class="brand-mark">V</div>
+      <div>
+        <div class="eyebrow">VANTAGE / HEALTH SYSTEM PLANNING</div>
+        <div class="brand-title">Ontario Healthcare Capacity Twin</div>
+      </div>
+    </div>
+    <div class="topbar-status">
+      <span class="online-dot"></span>
+      <strong>PLANNING TWIN ONLINE</strong>
+      <span class="divider"></span>
+      <span id="topScope">17 demand regions · 21 hospital sites</span>
+      <span class="divider"></span>
+      <span>Public-data POC</span>
+    </div>
+    <div class="topbar-actions">
+      <button id="placeButton" class="button button-primary">Place new hospital</button>
+      <button id="clearScenarioButton" class="button button-ghost">Clear scenario</button>
+    </div>
+  </header>
+
+  <aside class="left-panel panel-scroll">
+    <section class="hero-card">
+      <div class="hero-graphic">
+        <div class="ontario-outline">ONT</div>
+        <div class="pulse-ring r1"></div><div class="pulse-ring r2"></div>
+        <div class="hospital-glyph">+</div>
+      </div>
+      <div>
+        <span class="source-chip">SYSTEM PLANNING</span>
+        <h2>Capacity, access and growth in one model.</h2>
+        <p>Test where new acute-care capacity changes access, demand allocation and facility stress.</p>
+      </div>
+    </section>
+
+    <section class="panel-section">
+      <div class="section-heading"><span>Planning horizon</span><span id="yearValue" class="status-pill live">2035</span></div>
+      <div class="year-switch">
+        <button data-year="2026">2026</button>
+        <button data-year="2035" class="active">2035</button>
+        <button data-year="2050">2050</button>
+      </div>
+      <div class="source-line"><i></i><span>StatsCan 2025 estimate → 2050 M1 projection</span></div>
+    </section>
+
+    <section class="panel-section">
+      <div class="section-heading"><span>Site optimization</span><span class="status-pill">OR</span></div>
+      <label class="control-label" for="objective"><span>Objective</span></label>
+      <select id="objective">
+        <option value="balanced">Balanced system objective</option>
+        <option value="p_median">P-median · minimize travel</option>
+        <option value="coverage">MCLP · maximize coverage</option>
+        <option value="equity">P-center / equity</option>
+      </select>
+
+      <label class="control-label" for="accessMinutes"><span>Access target</span><b id="accessMinutesValue">30 min</b></label>
+      <input id="accessMinutes" type="range" min="15" max="60" step="5" value="30" />
+
+      <button id="optimizeButton" class="button button-primary wide">Find best candidate sites</button>
+      <div id="recommendationList" class="recommendation-list">
+        <div class="empty-state">Run the optimizer to rank candidate regions.</div>
+      </div>
+    </section>
+
+    <section class="panel-section">
+      <div class="section-heading"><span>New facility scenario</span><span id="scenarioStatus" class="status-pill">OFF</span></div>
+      <div class="field-pair">
+        <label><span>Planning beds</span><input id="bedsInput" type="number" min="50" max="2000" step="25" value="350" /></label>
+        <label><span>ED capacity / yr</span><input id="edCapacityInput" type="number" min="10000" max="400000" step="5000" value="75000" /></label>
+      </div>
+      <label class="control-label" for="edRate"><span>All-ED utilization reference</span><b id="edRateValue">0.39 / person</b></label>
+      <input id="edRate" type="range" min="0.25" max="0.65" step="0.01" value="0.39" />
+      <div id="placeHint" class="place-hint"><span class="crosshair">⌖</span><span>Click “Place new hospital”, then click the map.</span></div>
+    </section>
+
+    <section class="panel-section model-stack">
+      <div class="section-heading"><span>Research stack</span><span class="status-pill">6 MODELS</span></div>
+      <article><b>E2SFCA</b><span>distance-decayed spatial accessibility</span></article>
+      <article><b>Gravity / Huff</b><span>capacity-weighted demand allocation</span></article>
+      <article><b>P-median</b><span>demand-weighted travel minimization</span></article>
+      <article><b>MCLP</b><span>population coverage within target time</span></article>
+      <article><b>P-center</b><span>worst-case access / equity objective</span></article>
+      <article><b>Erlang-C + MC</b><span>queue and capacity-stress proxy</span></article>
+    </section>
+  </aside>
+
+  <main class="main-area">
+    <section class="metric-strip">
+      <article class="metric-card" data-icon="◎"><span>POPULATION MODELLED</span><strong id="metricPopulation">—</strong><small id="metricYear">2035 planning year</small></article>
+      <article class="metric-card" data-icon="◉"><span>WITHIN ACCESS TARGET</span><strong id="metricCoverage">—</strong><small id="metricCoverageSub">within 30 minutes</small></article>
+      <article class="metric-card" data-icon="↗"><span>AVG NEAREST ACCESS</span><strong id="metricTravel">—</strong><small>road-time proxy</small></article>
+      <article class="metric-card" data-icon="!"><span>CAPACITY STRESS</span><strong id="metricOverloaded">—</strong><small>modelled >100% ED load</small></article>
+      <article class="metric-card" data-icon="◇"><span>ACCESS EQUITY</span><strong id="metricEquity">—</strong><small>lower CV is better</small></article>
+      <article class="metric-card accent" data-icon="+"><span>DEMAND SHIFTED</span><strong id="metricShifted">—</strong><small>to proposed site / year</small></article>
+    </section>
+
+    <section class="map-toolbar">
+      <div class="mode-switch">
+        <button data-layer="stress" class="active">Capacity stress</button>
+        <button data-layer="demand">Population demand</button>
+        <button data-layer="access">Access score</button>
+      </div>
+      <div class="basemap-switch">
+        <button data-basemap="dark" class="active">Dark map</button>
+        <button data-basemap="aerial">Satellite</button>
+      </div>
+      <div class="map-legend">
+        <span><i class="legend-dot stable"></i> Stable</span>
+        <span><i class="legend-dot watch"></i> Watch</span>
+        <span><i class="legend-dot high"></i> High</span>
+        <span><i class="legend-dot critical"></i> Critical</span>
+      </div>
+    </section>
+
+    <section id="mapFrame" class="map-frame">
+      <div id="map"></div>
+      <div id="mapModeBanner" class="map-mode-banner"><span>⌖</span> PLACE FACILITY MODE · CLICK MAP</div>
+      <div class="map-badge">ONTARIO PUBLIC-DATA PLANNING MODEL · NOT A CLINICAL FORECAST</div>
+      <div id="scenarioDelta" class="scenario-delta hidden"></div>
+    </section>
+  </main>
+
+  <aside class="right-panel panel-scroll">
+    <section class="system-card">
+      <div class="section-heading"><span>System state</span><span class="status-pill live">MODELLED</span></div>
+      <div class="system-score">
+        <strong id="systemDemand">—</strong>
+        <span>annual major-centre ED-equivalent demand assigned through the sentinel network</span>
+      </div>
+      <div class="state-bar"><i id="systemBar"></i></div>
+      <p id="systemNarrative">Loading Ontario healthcare planning state…</p>
+    </section>
+
+    <section class="panel-section">
+      <div class="section-heading"><span>Selected hospital</span><span id="selectedBasis" class="status-pill">SOURCE</span></div>
+      <select id="hospitalSelect"></select>
+      <div id="hospitalCard" class="hospital-card">
+        <div class="hospital-icon">+</div>
+        <div><strong>—</strong><span>—</span></div>
+      </div>
+      <div class="detail-grid">
+        <article><span>Planning beds</span><strong id="hospitalBeds">—</strong></article>
+        <article><span>ED capacity</span><strong id="hospitalCapacity">—</strong></article>
+        <article><span>Assigned demand</span><strong id="hospitalDemand">—</strong></article>
+        <article><span>Load ratio</span><strong id="hospitalLoad">—</strong></article>
+      </div>
+      <div class="stress-meter">
+        <div><span>Queue stress proxy</span><b id="stressBand">—</b></div>
+        <div class="meter-track"><i id="stressBar"></i></div>
+        <small id="stressDetail">—</small>
+      </div>
+      <div class="benchmark-box">
+        <span>ONTARIO HEALTH BENCHMARK</span>
+        <strong>1.7 h</strong>
+        <p>Average wait to first assessment, January 2026. Shown as a provincial benchmark, not attributed to this hospital.</p>
+      </div>
+    </section>
+
+    <section class="panel-section">
+      <div class="section-heading"><span>Demand regions</span><span class="status-pill">E2SFCA</span></div>
+      <div id="regionList" class="region-list"></div>
+    </section>
+
+    <section class="panel-section provenance-card">
+      <div class="section-heading"><span>Data provenance</span><span class="status-pill live">AUDITABLE</span></div>
+      <ul>
+        <li><i class="observed"></i><div><b>Observed public data</b><span>StatsCan population estimates/projections, real hospital sites, provincial ED benchmark.</span></div></li>
+        <li><i class="modelled"></i><div><b>Planning model</b><span>30% sentinel-network demand assignment, travel-time proxy, E2SFCA access, queue stress and proposed-site impacts.</span></div></li>
+        <li><i class="proxy"></i><div><b>Capacity proxy</b><span>Public POC uses planning capacity fields where facility-level CIHI values are not bundled.</span></div></li>
+      </ul>
+    </section>
+  </aside>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script type="module" src="/js/app.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "population_2025": {
+    "title": "Statistics Canada Table 17-10-0152-01",
+    "url": "https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710015201",
+    "note": "Annual population estimates by census division. Exact Statistics Canada 2025 values are bundled for all included demand regions."
+  },
+  "population_2050": {
+    "title": "Statistics Canada Table 17-10-0162-01",
+    "url": "https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710016201",
+    "note": "2050 population projections, M1 medium-growth scenario."
+  },
+  "hospital_locations": {
+    "title": "Ontario MOHSERLO",
+    "url": "https://data.ontario.ca/dataset/ministry-of-health-service-provider-locations-mohserlo",
+    "note": "Ontario Ministry of Health service provider locations. Hospital sites in the demo are real operating locations."
+  },
+  "ed_benchmark": {
+    "title": "Ontario Health – Time Spent in Emergency Departments",
+    "url": "https://www.ontariohealth.ca/system/reporting/performance/time-spent-in-emergency-departments",
+    "note": "January 2026 provincial average wait to first assessment: 1.7 hours."
+  },
+  "cihi_indicators": {
+    "title": "CIHI Indicator Library",
+    "url": "https://www.cihi.ca/en/access-data-and-reports/indicator-library",
+    "note": "Defines ED visit volume, acute beds, occupancy, hospital stays and ED performance indicators."
+  }
+}
