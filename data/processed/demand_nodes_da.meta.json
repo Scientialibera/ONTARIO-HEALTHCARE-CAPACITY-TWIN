@@ -1,0 +1,165 @@
+{
+  "geography_level": "DA",
+  "demand_nodes": 15855,
+  "fine_grained": true,
+  "source": "Statistics Canada 2021 Geographic Attribute File",
+  "source_url": "https://www12.statcan.gc.ca/census-recensement/2021/geo/aip-pia/attribute-attribs/files-fichiers/2021_92-151_X.zip",
+  "source_population_level": "DB aggregated to DA",
+  "coverage": "17 bundled Ontario census divisions",
+  "projection_method": "Observed DA 2021 spatial weights reconciled exactly to parent CD 2025 estimate and 2050 M1 control totals",
+  "control_checks": {
+    "3506": {
+      "name": "Ottawa",
+      "da_nodes": 1391,
+      "population_2021": 1017449,
+      "population_2025": 1188114,
+      "population_2050_m1": 1566946,
+      "target_2025": 1188114,
+      "target_2050_m1": 1566946
+    },
+    "3510": {
+      "name": "Frontenac",
+      "da_nodes": 235,
+      "population_2021": 161780,
+      "population_2025": 180952,
+      "population_2050_m1": 195662,
+      "target_2025": 180952,
+      "target_2050_m1": 195662
+    },
+    "3518": {
+      "name": "Durham",
+      "da_nodes": 1003,
+      "population_2021": 696992,
+      "population_2025": 810075,
+      "population_2050_m1": 1065836,
+      "target_2025": 810075,
+      "target_2050_m1": 1065836
+    },
+    "3519": {
+      "name": "York",
+      "da_nodes": 1181,
+      "population_2021": 1173334,
+      "population_2025": 1299177,
+      "population_2050_m1": 1416134,
+      "target_2025": 1299177,
+      "target_2050_m1": 1416134
+    },
+    "3520": {
+      "name": "Toronto",
+      "da_nodes": 3734,
+      "population_2021": 2794356,
+      "population_2025": 3271830,
+      "population_2050_m1": 3901381,
+      "target_2025": 3271830,
+      "target_2050_m1": 3901381
+    },
+    "3521": {
+      "name": "Peel",
+      "da_nodes": 1741,
+      "population_2021": 1451022,
+      "population_2025": 1632557,
+      "population_2050_m1": 1673899,
+      "target_2025": 1632557,
+      "target_2050_m1": 1673899
+    },
+    "3523": {
+      "name": "Wellington",
+      "da_nodes": 358,
+      "population_2021": 241026,
+      "population_2025": 267650,
+      "population_2050_m1": 298349,
+      "target_2025": 267650,
+      "target_2050_m1": 298349
+    },
+    "3524": {
+      "name": "Halton",
+      "da_nodes": 829,
+      "population_2021": 596637,
+      "population_2025": 666454,
+      "population_2050_m1": 774699,
+      "target_2025": 666454,
+      "target_2050_m1": 774699
+    },
+    "3525": {
+      "name": "Hamilton",
+      "da_nodes": 890,
+      "population_2021": 569353,
+      "population_2025": 640465,
+      "population_2050_m1": 747356,
+      "target_2025": 640465,
+      "target_2050_m1": 747356
+    },
+    "3526": {
+      "name": "Niagara",
+      "da_nodes": 744,
+      "population_2021": 477941,
+      "population_2025": 551128,
+      "population_2050_m1": 701359,
+      "target_2025": 551128,
+      "target_2050_m1": 701359
+    },
+    "3529": {
+      "name": "Brant",
+      "da_nodes": 238,
+      "population_2021": 144771,
+      "population_2025": 177094,
+      "population_2050_m1": 239085,
+      "target_2025": 177094,
+      "target_2050_m1": 239085
+    },
+    "3530": {
+      "name": "Waterloo",
+      "da_nodes": 766,
+      "population_2021": 587165,
+      "population_2025": 711457,
+      "population_2050_m1": 990244,
+      "target_2025": 711457,
+      "target_2050_m1": 990244
+    },
+    "3537": {
+      "name": "Essex",
+      "da_nodes": 667,
+      "population_2021": 422860,
+      "population_2025": 489176,
+      "population_2050_m1": 586192,
+      "target_2025": 489176,
+      "target_2050_m1": 586192
+    },
+    "3539": {
+      "name": "Middlesex",
+      "da_nodes": 709,
+      "population_2021": 500563,
+      "population_2025": 584933,
+      "population_2050_m1": 731932,
+      "target_2025": 584933,
+      "target_2050_m1": 731932
+    },
+    "3543": {
+      "name": "Simcoe",
+      "da_nodes": 799,
+      "population_2021": 533169,
+      "population_2025": 611297,
+      "population_2050_m1": 768890,
+      "target_2025": 611297,
+      "target_2050_m1": 768890
+    },
+    "3553": {
+      "name": "Greater Sudbury",
+      "da_nodes": 267,
+      "population_2021": 166128,
+      "population_2025": 188645,
+      "population_2050_m1": 219111,
+      "target_2025": 188645,
+      "target_2050_m1": 219111
+    },
+    "3558": {
+      "name": "Thunder Bay",
+      "da_nodes": 303,
+      "population_2021": 146862,
+      "population_2025": 157958,
+      "population_2050_m1": 145231,
+      "target_2025": 157958,
+      "target_2050_m1": 145231
+    }
+  }
+}
