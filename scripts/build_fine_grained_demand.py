@@ -29,7 +29,6 @@ GAF_URL = "https://www12.statcan.gc.ca/census-recensement/2021/geo/aip-pia/attri
 ALIASES = {
     "pr_uid": ["PRUID_PRIDU", "PRUID", "PRuid"],
     "cd_uid": ["CDUID_DRIDU", "CDUID", "CDuid"],
-    "cd_pop": ["CDPOP_2021", "CDpop_2021"],
     "da_uid": ["DAUID_ADIDU", "DAUID", "DAuid"],
     "da_dguid": ["DADGUID_ADIDUGD", "DADGUID", "DAdguid"],
     "da_pop": ["DAPOP_2021", "DApop_2021"],
