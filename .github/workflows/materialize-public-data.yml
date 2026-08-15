@@ -8,12 +8,17 @@ on:
       - "data/processed/regions.json"
       - ".github/workflows/materialize-public-data.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build-demand-layer:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -29,9 +34,10 @@ jobs:
           assert len(rows) > 10000, len(rows)
           assert all(r['geography_level']=='DA' for r in rows)
           assert meta['demand_nodes'] == len(rows)
+          assert meta['source_population_level'] == 'DB aggregated to DA'
           for cd in meta['control_checks'].values():
-              assert cd['population_2025'] > 0
-              assert cd['population_2050_m1'] > 0
+              assert cd['population_2025'] == cd['target_2025']
+              assert cd['population_2050_m1'] == cd['target_2050_m1']
           print(f"validated {len(rows):,} demand nodes")
           PY
       - uses: actions/upload-artifact@v4
@@ -41,3 +47,14 @@ jobs:
             data/processed/demand_nodes_da.json.gz
             data/processed/demand_nodes_da.meta.json
           retention-days: 7
+      - name: Publish validated demand layer to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/processed/demand_nodes_da.json.gz data/processed/demand_nodes_da.meta.json
+          if git diff --cached --quiet; then
+            echo "Demand layer unchanged"
+            exit 0
+          fi
+          git commit -m "Bundle validated Statistics Canada DA demand layer"
+          git push origin HEAD:main
