@@ -21,6 +21,24 @@ class DemandNode:
     parent_name: str | None = None
     source_id: str | None = None
     cd_uid: str | None = None
+    # Optional observed 2021 Census age counts. These are populated only when
+    # the official Census Profile age layer has been materialized locally.
+    age_0_14_2021: int | None = None
+    age_15_64_2021: int | None = None
+    age_65_plus_2021: int | None = None
+    age_85_plus_2021: int | None = None
+
+    @property
+    def has_age_profile(self) -> bool:
+        return all(
+            value is not None
+            for value in (
+                self.age_0_14_2021,
+                self.age_15_64_2021,
+                self.age_65_plus_2021,
+                self.age_85_plus_2021,
+            )
+        )
 
 
 @dataclass(frozen=True)
