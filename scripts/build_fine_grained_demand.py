@@ -2,13 +2,14 @@
 """Build an Ontario dissemination-area healthcare demand layer from Statistics Canada.
 
 Source: 2021 Geographic Attribute File (GAF), catalogue 92-151-X.
-The GAF is DB-level but repeats DA attributes including DA 2021 population and
-population-weighted representative coordinates. One record per DA is retained.
+The GAF is dissemination-block level. This materializer aggregates observed
+2021 dissemination-block population to dissemination areas (DAs), while using
+the repeated DA identifiers and population-weighted DA representative points.
 
-For the 17 census divisions in the public POC, the observed 2021 DA spatial
-weights are reconciled exactly to the bundled 2025 population estimate and
-2050 M1 parent control totals. This gives fine spatial demand without implying
-that Statistics Canada publishes a DA-level 2050 forecast.
+For the 17 census divisions in the public POC, observed DA 2021 spatial weights
+are reconciled exactly to the bundled 2025 population estimate and 2050 M1
+parent control totals. The 2025/2050 DA values are transparent planning
+allocations, not official Statistics Canada DA forecasts.
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ ALIASES = {
     "cd_uid": ["CDUID_DRIDU", "CDUID", "CDuid"],
     "da_uid": ["DAUID_ADIDU", "DAUID", "DAuid"],
     "da_dguid": ["DADGUID_ADIDUGD", "DADGUID", "DAdguid"],
-    "da_pop": ["DAPOP_2021", "DApop_2021"],
+    "db_pop": ["DBPOP_2021", "DBpop_2021", "DBPOP2021", "DBpop2021"],
     "da_lat": ["DARPLAT_ADLAT", "DARPLAT", "DArplat"],
     "da_lon": ["DARPLONG_ADLONG", "DARPLONG", "DArplong"],
 }
@@ -48,7 +49,7 @@ def choose(fieldnames: list[str], key: str) -> str:
             a = alias.lower()
             if lower.startswith(a + "_") or lower.endswith("_" + a):
                 return field
-    raise KeyError(f"Could not find {key}; tried {ALIASES[key]}")
+    raise KeyError(f"Could not find {key}; tried {ALIASES[key]}. Available fields: {fieldnames}")
 
 
 def to_int(value: str | None) -> int:
@@ -87,8 +88,7 @@ def reconcile(raw: list[tuple[str, int]], target: int) -> dict[str, int]:
 def materialize(gaf_zip: Path, anchors_path: Path) -> tuple[list[dict], dict]:
     anchors = json.loads(anchors_path.read_text(encoding="utf-8"))
     anchor_by_cd = {str(row["cd_uid"]): row for row in anchors if row.get("cd_uid")}
-    seen: set[str] = set()
-    raw_nodes: list[dict] = []
+    da_nodes: dict[str, dict] = {}
 
     with zipfile.ZipFile(gaf_zip) as archive:
         csv_name = next(name for name in archive.namelist() if name.lower().endswith(".csv"))
@@ -103,34 +103,41 @@ def materialize(gaf_zip: Path, anchors_path: Path) -> tuple[list[dict], dict]:
                 if cd_uid not in anchor_by_cd:
                     continue
                 da_uid = row[cols["da_uid"]].strip()
-                if not da_uid or da_uid in seen:
+                if not da_uid:
                     continue
-                seen.add(da_uid)
-                pop_2021 = to_int(row[cols["da_pop"]])
-                if pop_2021 <= 0:
-                    continue
-                try:
-                    lat = to_float(row[cols["da_lat"]])
-                    lon = to_float(row[cols["da_lon"]])
-                except ValueError:
-                    continue
-                parent = anchor_by_cd[cd_uid]
-                raw_nodes.append({
-                    "id": f"da-{da_uid}",
-                    "name": f"{parent['name']} · DA {da_uid}",
-                    "lat": lat,
-                    "lon": lon,
-                    "population_2021": pop_2021,
-                    "geography_level": "DA",
-                    "parent_id": parent["id"],
-                    "parent_name": parent["name"],
-                    "source_id": row[cols["da_dguid"]].strip() or da_uid,
-                    "cd_uid": cd_uid,
-                })
 
+                db_pop = max(0, to_int(row[cols["db_pop"]]))
+                node = da_nodes.get(da_uid)
+                if node is None:
+                    try:
+                        lat = to_float(row[cols["da_lat"]])
+                        lon = to_float(row[cols["da_lon"]])
+                    except ValueError:
+                        continue
+                    parent = anchor_by_cd[cd_uid]
+                    node = {
+                        "id": f"da-{da_uid}",
+                        "name": f"{parent['name']} · DA {da_uid}",
+                        "lat": lat,
+                        "lon": lon,
+                        "population_2021": 0,
+                        "geography_level": "DA",
+                        "parent_id": parent["id"],
+                        "parent_name": parent["name"],
+                        "source_id": row[cols["da_dguid"]].strip() or da_uid,
+                        "cd_uid": cd_uid,
+                    }
+                    da_nodes[da_uid] = node
+                node["population_2021"] += db_pop
+
+    raw_nodes = [n for n in da_nodes.values() if n["population_2021"] > 0]
     by_cd: dict[str, list[dict]] = defaultdict(list)
     for node in raw_nodes:
         by_cd[node["cd_uid"]].append(node)
+
+    missing = sorted(set(anchor_by_cd) - set(by_cd))
+    if missing:
+        raise RuntimeError(f"No populated DAs materialized for census divisions: {missing}")
 
     nodes: list[dict] = []
     control_checks: dict[str, dict] = {}
@@ -140,17 +147,19 @@ def materialize(gaf_zip: Path, anchors_path: Path) -> tuple[list[dict], dict]:
         p2025 = reconcile(source, int(parent["population_2025"]))
         p2050 = reconcile(source, int(parent["population_2050_m1"]))
         for n in group:
-            n = dict(n)
-            n.pop("cd_uid", None)
-            n["population_2025"] = p2025[n["id"]]
-            n["population_2050_m1"] = p2050[n["id"]]
-            nodes.append(n)
+            out = dict(n)
+            out.pop("cd_uid", None)
+            out["population_2025"] = p2025[out["id"]]
+            out["population_2050_m1"] = p2050[out["id"]]
+            nodes.append(out)
         control_checks[cd_uid] = {
             "name": parent["name"],
             "da_nodes": len(group),
             "population_2021": sum(n["population_2021"] for n in group),
             "population_2025": sum(p2025.values()),
             "population_2050_m1": sum(p2050.values()),
+            "target_2025": int(parent["population_2025"]),
+            "target_2050_m1": int(parent["population_2050_m1"]),
         }
 
     nodes.sort(key=lambda n: n["id"])
@@ -160,6 +169,7 @@ def materialize(gaf_zip: Path, anchors_path: Path) -> tuple[list[dict], dict]:
         "fine_grained": True,
         "source": "Statistics Canada 2021 Geographic Attribute File",
         "source_url": GAF_URL,
+        "source_population_level": "DB aggregated to DA",
         "coverage": "17 bundled Ontario census divisions",
         "projection_method": "Observed DA 2021 spatial weights reconciled exactly to parent CD 2025 estimate and 2050 M1 control totals",
         "control_checks": control_checks,
