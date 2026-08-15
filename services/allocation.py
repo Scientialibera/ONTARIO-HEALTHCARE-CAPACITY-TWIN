@@ -14,14 +14,24 @@ def gravity_assign(
     populations: dict[str, int],
     ed_visits_per_capita: float,
     include_flows: bool = False,
+    annual_demand_by_region: dict[str, float] | None = None,
 ) -> tuple[dict[str, float], dict[str, dict[str, float]], dict[str, float]]:
-    """Capacity-weighted Huff/gravity assignment without retaining a huge matrix by default."""
+    """Capacity-weighted Huff/gravity assignment without retaining a huge matrix by default.
+
+    ``annual_demand_by_region`` lets the planning layer supply demographic or
+    otherwise calibrated demand. When omitted, the historical population-only
+    formula is retained for backwards compatibility.
+    """
     facility_loads = defaultdict(float)
     flow_matrix: dict[str, dict[str, float]] = {}
     nearest_times: dict[str, float] = {}
 
     for region in regions:
-        annual_demand = populations[region.id] * ed_visits_per_capita * SENTINEL_NETWORK_CAPTURE_SHARE
+        annual_demand = (
+            annual_demand_by_region[region.id]
+            if annual_demand_by_region is not None
+            else populations[region.id] * ed_visits_per_capita * SENTINEL_NETWORK_CAPTURE_SHARE
+        )
         weights: list[tuple[Facility, float]] = []
         nearest = float("inf")
         for facility in facilities:
