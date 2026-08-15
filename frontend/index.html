@@ -23,7 +23,7 @@
       <span class="online-dot"></span>
       <strong>PLANNING TWIN ONLINE</strong>
       <span class="divider"></span>
-      <span id="topScope">17 demand regions · 21 hospital sites</span>
+      <span id="topScope">15,855 demand areas · 21 hospital sites</span>
       <span class="divider"></span>
       <span>Public-data POC</span>
     </div>
@@ -54,7 +54,7 @@
         <button data-year="2035" class="active">2035</button>
         <button data-year="2050">2050</button>
       </div>
-      <div class="source-line"><i></i><span>StatsCan 2025 estimate → 2050 M1 projection</span></div>
+      <div class="source-line"><i></i><span>StatsCan DA population · optional 2021 age profile · 2050 M1 parent controls</span></div>
     </section>
 
     <section class="panel-section">
@@ -88,7 +88,8 @@
     </section>
 
     <section class="panel-section model-stack">
-      <div class="section-heading"><span>Research stack</span><span class="status-pill">6 MODELS</span></div>
+      <div class="section-heading"><span>Research stack</span><span class="status-pill">7 MODELS</span></div>
+      <article><b>Demographic demand</b><span>normalized age-aware ED demand when official DA age data is present</span></article>
       <article><b>E2SFCA</b><span>distance-decayed spatial accessibility</span></article>
       <article><b>Gravity / Huff</b><span>capacity-weighted demand allocation</span></article>
       <article><b>P-median</b><span>demand-weighted travel minimization</span></article>
@@ -102,7 +103,7 @@
     <section class="metric-strip">
       <article class="metric-card" data-icon="◎"><span>POPULATION MODELLED</span><strong id="metricPopulation">—</strong><small id="metricYear">2035 planning year</small></article>
       <article class="metric-card" data-icon="◉"><span>WITHIN ACCESS TARGET</span><strong id="metricCoverage">—</strong><small id="metricCoverageSub">within 30 minutes</small></article>
-      <article class="metric-card" data-icon="↗"><span>AVG NEAREST ACCESS</span><strong id="metricTravel">—</strong><small>road-time proxy</small></article>
+      <article class="metric-card" data-icon="↗"><span>AVG NEAREST ACCESS</span><strong id="metricTravel">—</strong><small>OSRM network time when built · calibrated fallback otherwise</small></article>
       <article class="metric-card" data-icon="!"><span>CAPACITY STRESS</span><strong id="metricOverloaded">—</strong><small>modelled >100% ED load</small></article>
       <article class="metric-card" data-icon="◇"><span>ACCESS EQUITY</span><strong id="metricEquity">—</strong><small>lower CV is better</small></article>
       <article class="metric-card accent" data-icon="+"><span>DEMAND SHIFTED</span><strong id="metricShifted">—</strong><small>to proposed site / year</small></article>
@@ -178,9 +179,9 @@
     <section class="panel-section provenance-card">
       <div class="section-heading"><span>Data provenance</span><span class="status-pill live">AUDITABLE</span></div>
       <ul>
-        <li><i class="observed"></i><div><b>Observed public data</b><span>StatsCan population estimates/projections, real hospital sites, provincial ED benchmark.</span></div></li>
-        <li><i class="modelled"></i><div><b>Planning model</b><span>30% sentinel-network demand assignment, travel-time proxy, E2SFCA access, queue stress and proposed-site impacts.</span></div></li>
-        <li><i class="proxy"></i><div><b>Capacity proxy</b><span>Public POC uses planning capacity fields where facility-level CIHI values are not bundled.</span></div></li>
+        <li><i class="observed"></i><div><b>Observed public data</b><span>StatsCan DA population and coordinates, optional 2021 DA age structure, real hospital sites and provincial ED benchmark.</span></div></li>
+        <li><i class="modelled"></i><div><b>Planning model</b><span>Normalized age-aware demand when available, 30% sentinel-network assignment, E2SFCA access, queue stress and proposed-site impacts.</span></div></li>
+        <li><i class="proxy"></i><div><b>Routing / capacity boundary</b><span>OSRM fastest-road times are used only when a local matrix has been generated. Otherwise travel and some facility capacity values remain explicit planning proxies.</span></div></li>
       </ul>
     </section>
   </aside>
