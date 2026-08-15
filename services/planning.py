@@ -97,8 +97,23 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
         ed_visits_per_capita,
         annual_demand_by_region=annual_demand,
     )
-    accessibility = e2sfca_accessibility(regions, active_facilities, populations)
-    equity = accessibility_equity(accessibility, populations)
+
+    base_demand_rate = ed_visits_per_capita * SENTINEL_NETWORK_CAPTURE_SHARE
+    effective_demand_population = {
+        region.id: (
+            annual_demand[region.id] / base_demand_rate
+            if base_demand_rate > 0
+            else float(populations[region.id])
+        )
+        for region in regions
+    }
+    accessibility = e2sfca_accessibility(
+        regions,
+        active_facilities,
+        populations,
+        demand_weights=effective_demand_population,
+    )
+    equity = accessibility_equity(accessibility, effective_demand_population)
     coverage = _coverage_metrics(
         regions,
         active_facilities,
@@ -168,7 +183,7 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
             "population": "StatsCan DA spatial distribution with 2025 -> 2050 M1 parent-control interpolation when fine-grained data is bundled",
             "demand": demand_info.basis + "; aggregate utilization anchored to the user-selected ED visits reference and 30% sentinel-network capture share",
             "assignment": "capacity-weighted exponential gravity/Huff model",
-            "accessibility": "enhanced two-step floating catchment area (E2SFCA)",
+            "accessibility": "enhanced two-step floating catchment area (E2SFCA) using normalized effective demand population when age profiles are present",
             "travel": "precomputed OSRM network matrix when available; otherwise calibrated haversine road-time proxy",
             "queue": "Erlang-C + seeded Monte Carlo stress proxy",
         },
