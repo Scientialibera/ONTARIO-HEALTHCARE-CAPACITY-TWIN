@@ -2,9 +2,11 @@ import json
 import math
 from pathlib import Path
 
+from core.config import SENTINEL_NETWORK_CAPTURE_SHARE
 from domain.models import DemandNode, Facility
 from services.accessibility import accessibility_equity, e2sfca_accessibility
 from services.data_repository import load_demand_metadata, load_regions
+from services.demand import build_annual_demand
 from services.geography import haversine_km, routing_provider_name, travel_time_minutes
 from services.planning import build_state, optimize_site, projected_population
 from services.queueing import monte_carlo_capacity_risk
@@ -53,6 +55,38 @@ def test_e2sfca_and_weighted_equity_are_positive():
     assert equity["cv"] >= 0
 
 
+def test_age_adjustment_redistributes_but_preserves_aggregate_demand():
+    young = DemandNode(
+        "young", "Young", 43.6, -79.4, 10_000, 10_000,
+        age_0_14_2021=2_500, age_15_64_2021=7_000,
+        age_65_plus_2021=500, age_85_plus_2021=50,
+    )
+    older = DemandNode(
+        "older", "Older", 43.8, -79.8, 10_000, 10_000,
+        age_0_14_2021=1_000, age_15_64_2021=5_000,
+        age_65_plus_2021=4_000, age_85_plus_2021=1_000,
+    )
+    populations = {"young": 10_000, "older": 10_000}
+    rate = 0.40
+    demand, info = build_annual_demand([young, older], populations, rate)
+    expected = 20_000 * rate * SENTINEL_NETWORK_CAPTURE_SHARE
+    assert info.age_adjusted is True
+    assert info.profiled_nodes == 2
+    assert math.isclose(sum(demand.values()), expected, rel_tol=1e-12)
+    assert demand["older"] > demand["young"]
+
+
+def test_population_only_demand_is_retained_when_age_data_absent():
+    region = DemandNode("x", "X", 43.0, -79.0, 10_000, 12_000)
+    demand, info = build_annual_demand([region], {"x": 10_000}, 0.4)
+    assert info.age_adjusted is False
+    assert math.isclose(
+        demand["x"],
+        10_000 * 0.4 * SENTINEL_NETWORK_CAPTURE_SHARE,
+        rel_tol=1e-12,
+    )
+
+
 def test_state_reports_resolution_and_auditable_metrics():
     regions = [
         DemandNode("a", "A", 43.6, -79.4, 100_000, 120_000, geography_level="DA", parent_id="p1", parent_name="P1"),
@@ -66,6 +100,7 @@ def test_state_reports_resolution_and_auditable_metrics():
     state = build_state(regions, facilities, year=2035, access_minutes=30)
     assert state["data_resolution"]["geography_level"] == "DA"
     assert state["data_resolution"]["demand_nodes"] == 3
+    assert state["data_resolution"]["age_adjusted"] is False
     assert 0 <= state["metrics"]["coverage_pct"] <= 100
     assert state["methodology"]["accessibility"].startswith("enhanced")
 
