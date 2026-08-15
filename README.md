@@ -89,16 +89,29 @@ Open `http://127.0.0.1:8000`.
 2. To test a facility location, select **Place new hospital**, then click anywhere on the map. The model recalculates allocation, access and stress for the facility capacity inputs shown in the **New facility scenario** panel.
 3. To find candidates, choose an optimization objective and select **Find best candidate sites**. The top five ranked sites appear in the left panel; select one to model it as a scenario.
 4. Use **Clear scenario** to return to the baseline before comparing another site.
+5. Use **Copy scenario link** to share the selected coordinates and all active planning assumptions. Opening that link rebuilds the same scenario.
 
-The optimizer evaluates all 15,855 demand nodes. A run normally completes in tens of seconds on a local development machine; the interface keeps the action state visible while it runs.
+The optimizer evaluates all 15,855 demand nodes. A run normally completes in tens of seconds on a local development machine; the interface shows the active model stage and elapsed time while it runs. On narrow screens, use **Controls** and **Details** to open the responsive side panels.
 
 ## Screenshots
 
-Baseline province-wide capacity view:
+The numbered callouts identify the main operating areas:
+
+| Callout | Area | What it does |
+|---:|---|---|
+| **1** | Planning controls | Sets the planning year, optimization objective, access target, proposed beds, ED capacity and utilization reference. |
+| **2** | System KPI ribbon | Summarizes population, coverage, nearest access, overloaded facilities, access equity and demand shifted. |
+| **3** | Map command bar | Switches the capacity, population and access layers; changes the basemap; resets the Ontario view; and explains stress colors. |
+| **4** | Interactive planning map | Shows demand nodes and hospital sites. In placement mode, selecting a point runs a complete proposed-facility scenario. |
+| **5** | System and hospital insights | Reports system demand, selected-facility load and queue stress, regional access and data provenance. |
+| **6** | Scenario actions | Copies a reproducible scenario link, enters facility-placement mode or clears the active comparison. |
+| **7** | Scenario impact | Appears after placement and compares coverage, travel time, demand shifted and overloaded sites against baseline. |
+
+Annotated baseline province-wide capacity view:
 
 ![Ontario Healthcare Capacity Twin dashboard](docs/screenshots/dashboard.png)
 
-Placed-facility scenario, including demand shifted and the scenario-impact panel:
+Annotated placed-facility scenario, including demand shifted and the scenario-impact panel:
 
 ![Ontario Healthcare Capacity Twin placed-facility scenario](docs/screenshots/placed-facility.png)
 
@@ -255,6 +268,8 @@ GET  /api/state
 POST /api/scenario
 POST /api/optimize
 ```
+
+Every response includes an `X-Request-ID` and a `Server-Timing` header for lightweight diagnostics and performance tracing.
 
 `/api/state` includes geography resolution, active routing provider and demographic-demand status. Each DA row also exposes its normalized demand multiplier.
 

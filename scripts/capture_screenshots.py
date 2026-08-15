@@ -17,6 +17,14 @@ CHROME_CANDIDATES = (
     Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
 )
+BASE_CALLOUTS = (
+    ("#controlsPanel", 1),
+    (".metric-strip", 2),
+    (".map-toolbar", 3),
+    ("#mapFrame", 4),
+    ("#detailsPanel", 5),
+    (".topbar-actions", 6),
+)
 
 
 def available_port() -> int:
@@ -43,6 +51,53 @@ def wait_for_server(url: str) -> None:
     raise RuntimeError("The screenshot server did not start.")
 
 
+def add_callouts(page, *, include_scenario: bool = False) -> None:
+    """Overlay numbered documentation callouts without changing the app."""
+    callouts = list(BASE_CALLOUTS)
+    if include_scenario:
+        callouts.append(("#scenarioDelta", 7))
+    page.evaluate(
+        """
+        callouts => {
+          document.querySelectorAll('[data-doc-callout]').forEach(node => node.remove());
+          for (const [selector, number] of callouts) {
+            const target = document.querySelector(selector);
+            if (!target) continue;
+            const rect = target.getBoundingClientRect();
+            if (!rect.width || !rect.height) continue;
+
+            const box = document.createElement('div');
+            box.dataset.docCallout = number;
+            Object.assign(box.style, {
+              position: 'fixed', left: `${rect.left + 3}px`, top: `${rect.top + 3}px`,
+              width: `${Math.max(0, rect.width - 6)}px`, height: `${Math.max(0, rect.height - 6)}px`,
+              border: '2px solid #075fca', borderRadius: '9px', boxSizing: 'border-box',
+              boxShadow: '0 0 0 3px rgba(7,95,202,.14)', pointerEvents: 'none', zIndex: '20000'
+            });
+
+            const marker = document.createElement('div');
+            marker.dataset.docCallout = number;
+            marker.textContent = number;
+            Object.assign(marker.style, {
+              position: 'fixed', left: `${Math.max(6, rect.left + 10)}px`,
+              top: `${Math.max(6, rect.top + 10)}px`, width: '28px', height: '28px',
+              borderRadius: '7px', display: 'grid', placeItems: 'center',
+              background: '#075fca', color: '#fff', border: '2px solid #fff',
+              boxShadow: '0 4px 12px rgba(7,54,104,.3)', font: '800 14px Inter, sans-serif',
+              pointerEvents: 'none', zIndex: '20001'
+            });
+            document.body.append(box, marker);
+          }
+        }
+        """,
+        callouts,
+    )
+
+
+def clear_callouts(page) -> None:
+    page.evaluate("document.querySelectorAll('[data-doc-callout]').forEach(node => node.remove())")
+
+
 def main() -> None:
     port = available_port()
     url = f"http://127.0.0.1:{port}"
@@ -65,7 +120,9 @@ def main() -> None:
             page.goto(url, wait_until="domcontentloaded")
             page.locator("#metricPopulation").wait_for(state="visible")
             page.wait_for_function("document.querySelector('#metricPopulation').textContent !== '—'")
+            add_callouts(page)
             page.screenshot(path=SCREENSHOTS / "dashboard.png")
+            clear_callouts(page)
 
             page.get_by_role("button", name="Place new hospital").click()
             map_box = page.locator("#map").bounding_box()
@@ -74,6 +131,7 @@ def main() -> None:
             page.mouse.click(map_box["x"] + map_box["width"] * 0.52, map_box["y"] + map_box["height"] * 0.53)
             page.locator("#scenarioStatus").wait_for(state="visible")
             page.wait_for_function("document.querySelector('#scenarioStatus').textContent === 'ACTIVE'")
+            add_callouts(page, include_scenario=True)
             page.screenshot(path=SCREENSHOTS / "placed-facility.png")
             browser.close()
     finally:

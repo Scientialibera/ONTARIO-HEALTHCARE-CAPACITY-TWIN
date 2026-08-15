@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+from time import perf_counter
+from uuid import uuid4
+
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -17,6 +20,18 @@ app = FastAPI(
     version="0.3.0",
     description="Research-backed public-data planning POC for healthcare capacity and facility location.",
 )
+
+
+@app.middleware("http")
+async def add_api_observability(request: Request, call_next):
+    """Expose lightweight request tracing and timing for local diagnostics."""
+    request_id = request.headers.get("X-Request-ID") or uuid4().hex
+    started = perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (perf_counter() - started) * 1000
+    response.headers["X-Request-ID"] = request_id
+    response.headers["Server-Timing"] = f'app;dur={elapsed_ms:.1f};desc="Capacity twin"'
+    return response
 
 
 class ScenarioRequest(BaseModel):

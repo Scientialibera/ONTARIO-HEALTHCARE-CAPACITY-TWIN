@@ -1,0 +1,17 @@
+{
+  "name": "Ontario Healthcare Capacity Twin",
+  "short_name": "Ontario Capacity",
+  "description": "Healthcare capacity, access and facility-location planning for Ontario.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef3f8",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

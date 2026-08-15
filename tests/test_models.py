@@ -2,6 +2,9 @@ import json
 import math
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
+from api.main import app
 from core.config import SENTINEL_NETWORK_CAPTURE_SHARE
 from domain.models import DemandNode, Facility
 from services.accessibility import accessibility_equity, e2sfca_accessibility
@@ -10,6 +13,18 @@ from services.demand import build_annual_demand
 from services.geography import haversine_km, routing_provider_name, travel_time_minutes
 from services.planning import build_state, optimize_site, projected_population
 from services.queueing import monte_carlo_capacity_risk
+
+
+def test_api_emits_request_id_and_server_timing_headers():
+    client = TestClient(app)
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert len(response.headers["x-request-id"]) == 32
+    assert response.headers["server-timing"].startswith("app;dur=")
+    manifest = client.get("/assets/manifest.webmanifest")
+    assert manifest.status_code == 200
+    assert manifest.json()["name"] == "Ontario Healthcare Capacity Twin"
+    assert client.get("/assets/favicon.svg").status_code == 200
 
 
 def test_population_interpolation_anchor_math():
