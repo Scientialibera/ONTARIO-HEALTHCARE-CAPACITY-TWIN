@@ -6,15 +6,15 @@ The application combines real public population geography and real hospital loca
 
 ## Current model resolution
 
-The repository now supports a fine-grained Statistics Canada **dissemination-area demand layer**. The bundled runtime automatically uses `data/processed/demand_nodes_da.json.gz` when present and falls back to the original 17 census-division anchors when it is not present.
+The bundled runtime now uses **15,855 populated Statistics Canada dissemination areas** across the 17 census divisions covered by the public POC. The validated dataset is committed at `data/processed/demand_nodes_da.json.gz`; the original 17 census-division anchors remain a deterministic fallback and provide the 2025/2050 parent control totals.
 
-The DA layer is generated from the 2021 Geographic Attribute File using real DA population and population-weighted representative coordinates. The 2021 spatial distribution is reconciled to the parent 2025 population estimates and 2050 M1 control totals. See `docs/FINE_GRAINED_DATA.md`.
+The DA layer is generated reproducibly from the 2021 Geographic Attribute File by aggregating observed dissemination-block population into each DA and retaining Statistics Canada's population-weighted DA representative coordinates. The observed 2021 DA spatial distribution is then reconciled exactly to the parent 2025 population estimates and 2050 M1 control totals. The resulting small-area 2025/2050 values are planning allocations, not official Statistics Canada DA forecasts. See `docs/FINE_GRAINED_DATA.md`.
 
 ## What it does
 
 - Maps real Ontario acute-care hospital sites.
 - Uses Statistics Canada population anchors and 2050 M1 projections.
-- Models thousands of DA-level demand nodes when the fine-grained layer is bundled.
+- Models **15,855 DA-level demand nodes** in the bundled public runtime.
 - Estimates major-centre ED-equivalent demand using an explicit utilization coefficient and sentinel-network capture share.
 - Allocates modeled demand with a capacity-weighted **gravity / Huff model**.
 - Calculates spatial accessibility with **Enhanced Two-Step Floating Catchment Area (E2SFCA)**.
@@ -31,7 +31,7 @@ The DA layer is generated from the 2021 Geographic Attribute File using real DA 
 
 | Type | Examples |
 |---|---|
-| **Observed public data** | StatsCan DA geography/population, StatsCan population anchors/projections, Ontario hospital sites, Ontario Health provincial ED benchmark |
+| **Observed public data** | StatsCan DB/DA geography and 2021 population, StatsCan population anchors/projections, Ontario hospital sites, Ontario Health provincial ED benchmark |
 | **Planning model** | small-area growth disaggregation, gravity assignment, E2SFCA, p-median/MCLP/p-center, queue stress |
 | **Capacity proxy** | facility planning beds / ED capacity where current facility-level values are not bundled |
 
@@ -58,7 +58,7 @@ scripts/
   build_osrm_matrix.py
 data/processed/
   regions.json               parent CD control totals/fallback
-  demand_nodes_da.json.gz    fine-grained public demand layer
+  demand_nodes_da.json.gz    15,855-node fine-grained public demand layer
   demand_nodes_da.meta.json  provenance/control checks
   hospitals.json
 frontend/
@@ -99,7 +99,7 @@ docker run --rm -p 8080:8080 ontario-healthcare-capacity-twin
 **Statistics Canada 2021 Geographic Attribute File — 92-151-X**  
 https://www150.statcan.gc.ca/n1/en/catalogue/92-151-x
 
-The GAF includes DA population and population-weighted DA representative coordinates and is the source of the fine-grained spatial demand layer.
+The GAF is dissemination-block level. The materializer aggregates the observed DB population to each DA and retains the repeated DA identifiers and population-weighted DA representative coordinates.
 
 ### Population anchors and projections
 
@@ -141,7 +141,7 @@ See `docs/RESEARCH.md` for references and model limitations.
 Evaluating a full E2SFCA/capacity simulation at every DA candidate is unnecessary. The optimizer therefore uses a transparent two-stage process:
 
 ```text
-all DA demand nodes
+15,855 DA demand nodes
       ↓
 high-population + poor-access screening
       ↓
@@ -183,7 +183,7 @@ POST /api/optimize
 
 ## Modelling limitations
 
-- DA 2050 values are a transparent allocation of parent M1 controls, not official DA forecasts.
+- DA 2025/2050 values are transparent allocations of parent control totals, not official DA forecasts.
 - Gravity/Huff coefficients are planning parameters until calibrated to patient-origin data.
 - Capacity values remain planning proxies where authoritative facility-level data is not bundled.
 - Erlang-C is a stress indicator. Decision-grade ED operations require stage-level discrete-event simulation.
