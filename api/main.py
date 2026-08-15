@@ -14,7 +14,7 @@ from services.planning import build_state, optimize_site
 
 app = FastAPI(
     title="Ontario Healthcare Capacity Twin",
-    version="0.2.0",
+    version="0.3.0",
     description="Research-backed public-data planning POC for healthcare capacity and facility location.",
 )
 
@@ -40,7 +40,7 @@ class OptimizeRequest(BaseModel):
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "model": "Ontario Healthcare Capacity Twin", "version": "0.2.0"}
+    return {"status": "ok", "model": "Ontario Healthcare Capacity Twin", "version": "0.3.0"}
 
 
 @app.get("/api/sources")
