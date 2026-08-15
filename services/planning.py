@@ -6,6 +6,7 @@ from core.config import DEFAULT_ED_VISITS_PER_CAPITA, SENTINEL_NETWORK_CAPTURE_S
 from domain.models import DemandNode, Facility, ScenarioFacility
 from services.accessibility import accessibility_equity, e2sfca_accessibility
 from services.allocation import gravity_assign, load_ratio
+from services.demand import build_annual_demand
 from services.geography import routing_provider_name, travel_time_minutes
 from services.queueing import monte_carlo_capacity_risk, queue_stress_proxy
 
@@ -54,14 +55,21 @@ def _coverage_metrics(regions, facilities, populations, access_minutes):
     }
 
 
-def _resolution(regions: list[DemandNode]) -> dict:
+def _resolution(regions: list[DemandNode], demand_info=None) -> dict:
     level = regions[0].geography_level if regions else "unknown"
-    return {
+    result = {
         "geography_level": level,
         "demand_nodes": len(regions),
         "fine_grained": level.upper() == "DA",
         "routing_provider": routing_provider_name(),
     }
+    if demand_info is not None:
+        result.update({
+            "age_adjusted": demand_info.age_adjusted,
+            "age_profiled_nodes": demand_info.profiled_nodes,
+            "age_source_year": demand_info.age_source_year,
+        })
+    return result
 
 
 def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per_capita=DEFAULT_ED_VISITS_PER_CAPITA, proposed=None):
@@ -70,7 +78,14 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
         active_facilities.append(proposed.as_facility())
 
     populations = populations_for_year(regions, year)
-    loads, _, nearest_times = gravity_assign(regions, active_facilities, populations, ed_visits_per_capita)
+    annual_demand, demand_info = build_annual_demand(regions, populations, ed_visits_per_capita)
+    loads, _, nearest_times = gravity_assign(
+        regions,
+        active_facilities,
+        populations,
+        ed_visits_per_capita,
+        annual_demand_by_region=annual_demand,
+    )
     accessibility = e2sfca_accessibility(regions, active_facilities, populations)
     equity = accessibility_equity(accessibility, populations)
     coverage = _coverage_metrics(regions, active_facilities, populations, access_minutes)
@@ -93,23 +108,27 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
     region_rows = []
     for r in regions:
         row = asdict(r)
+        baseline = populations[r.id] * ed_visits_per_capita * SENTINEL_NETWORK_CAPTURE_SHARE
+        node_demand = annual_demand[r.id]
         row.update({
             "population": populations[r.id],
-            "annual_ed_demand": populations[r.id] * ed_visits_per_capita * SENTINEL_NETWORK_CAPTURE_SHARE,
+            "annual_ed_demand": node_demand,
+            "demand_multiplier": node_demand / baseline if baseline > 0 else 1.0,
             "accessibility_score": accessibility[r.id],
             "nearest_minutes": nearest_times[r.id],
             "within_target": coverage["region_access"][r.id]["covered"],
         })
         region_rows.append(row)
 
-    total_ed_demand = sum(r["annual_ed_demand"] for r in region_rows)
+    total_ed_demand = sum(annual_demand.values())
     proposed_assigned = loads.get("proposed", 0.0)
     return {
         "year": year,
         "access_minutes": access_minutes,
         "ed_visits_per_capita": ed_visits_per_capita,
         "sentinel_network_capture_share": SENTINEL_NETWORK_CAPTURE_SHARE,
-        "data_resolution": _resolution(regions),
+        "data_resolution": _resolution(regions, demand_info),
+        "demand_model": demand_info.to_dict(),
         "metrics": {
             "population": sum(populations.values()),
             "annual_ed_demand": total_ed_demand,
@@ -127,10 +146,10 @@ def build_state(regions, facilities, year=2026, access_minutes=30, ed_visits_per
         "equity": equity,
         "methodology": {
             "population": "StatsCan DA spatial distribution with 2025 -> 2050 M1 parent-control interpolation when fine-grained data is bundled",
-            "demand": "projected population × ED visits coefficient × 30% sentinel-network capture share",
+            "demand": demand_info.basis + "; aggregate utilization anchored to the user-selected ED visits reference and 30% sentinel-network capture share",
             "assignment": "capacity-weighted exponential gravity/Huff model",
             "accessibility": "enhanced two-step floating catchment area (E2SFCA)",
-            "travel": "precomputed network matrix when available; otherwise calibrated haversine road-time proxy",
+            "travel": "precomputed OSRM network matrix when available; otherwise calibrated haversine road-time proxy",
             "queue": "Erlang-C + seeded Monte Carlo stress proxy",
         },
     }
@@ -150,9 +169,12 @@ def _objective_score(state: dict, objective: str) -> float:
 def _candidate_pool(regions: list[DemandNode], populations: dict[str, int], baseline: dict, max_candidates: int = 140) -> list[DemandNode]:
     """Build a diverse high-impact candidate pool before exact evaluation."""
     nearest = {r["id"]: r["nearest_minutes"] for r in baseline["regions"]}
+    demand_multiplier = {r["id"]: r.get("demand_multiplier", 1.0) for r in baseline["regions"]}
     ranked = sorted(
         regions,
-        key=lambda r: populations[r.id] * (1.0 + min(nearest.get(r.id, 0.0), 120.0) / 30.0),
+        key=lambda r: populations[r.id]
+        * demand_multiplier.get(r.id, 1.0)
+        * (1.0 + min(nearest.get(r.id, 0.0), 120.0) / 30.0),
         reverse=True,
     )
     chosen: list[DemandNode] = []
@@ -171,16 +193,18 @@ def _candidate_pool(regions: list[DemandNode], populations: dict[str, int], base
 
 def _screen_score(candidate: DemandNode, regions: list[DemandNode], populations: dict[str, int], baseline: dict, access_minutes: int, objective: str) -> float:
     baseline_times = {r["id"]: r["nearest_minutes"] for r in baseline["regions"]}
-    total_pop = sum(populations.values()) or 1
+    demand_multiplier = {r["id"]: r.get("demand_multiplier", 1.0) for r in baseline["regions"]}
+    effective_pop = {r.id: populations[r.id] * demand_multiplier.get(r.id, 1.0) for r in regions}
+    total_pop = sum(effective_pop.values()) or 1
     weighted = 0.0
-    covered = 0
+    covered = 0.0
     worst = 0.0
     for region in regions:
         candidate_time = travel_time_minutes(region.lat, region.lon, candidate.lat, candidate.lon)
         nearest = min(baseline_times[region.id], candidate_time)
-        pop = populations[region.id]
-        weighted += pop * nearest
-        covered += pop if nearest <= access_minutes else 0
+        demand_weight = effective_pop[region.id]
+        weighted += demand_weight * nearest
+        covered += demand_weight if nearest <= access_minutes else 0
         worst = max(worst, nearest)
     avg = weighted / total_pop
     coverage = 100 * covered / total_pop
