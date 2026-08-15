@@ -29,4 +29,7 @@ service-account*.json
 data/raw/
 data/cache/
 data/processed/travel_matrix.json.gz
+data/processed/travel_matrix.meta.json
 2021_92-151_X.zip
+98-401-X2021006*.zip
+98-401-X2021006*.csv
