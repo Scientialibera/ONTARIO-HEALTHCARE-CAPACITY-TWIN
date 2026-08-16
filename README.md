@@ -1,78 +1,91 @@
 # Ontario Healthcare Capacity Twin
 
-A research-backed public-data digital twin for exploring **healthcare capacity, geographic access and new-facility location scenarios in Ontario**.
+This repository models hospital access, demand allocation and candidate facility siting across Ontario using public population geography and hospital locations. The bundled runtime contains 15,855 populated Statistics Canada dissemination areas across 17 census divisions. Small-area demand can be adjusted by observed age structure when the optional Census Profile artifact is present, while travel time can use a precomputed OSRM road matrix when that artifact has been generated.
 
-The application combines real public population geography and real hospital locations with explicit planning models. It is a planning POC and does not claim to reproduce patient-level clinical flows or predict individual healthcare use.
+## Interface
 
-## Current model resolution
+### Baseline capacity view
 
-The bundled runtime uses **15,855 populated Statistics Canada dissemination areas** across the 17 census divisions covered by the public POC. The validated dataset is committed at `data/processed/demand_nodes_da.json.gz`; the original 17 census-division anchors remain a deterministic fallback and provide the 2025/2050 parent control totals.
+![Ontario healthcare capacity dashboard](docs/screenshots/dashboard.png)
 
-The DA layer is generated reproducibly from the 2021 Geographic Attribute File by aggregating observed dissemination-block population into each DA and retaining Statistics Canada's population-weighted DA representative coordinates. The observed 2021 DA spatial distribution is then reconciled exactly to the parent 2025 population estimates and 2050 M1 control totals. The resulting small-area 2025/2050 values are planning allocations, not official Statistics Canada DA forecasts.
+### Proposed-facility view
 
-## What it does
+![Ontario healthcare capacity scenario](docs/screenshots/placed-facility.png)
 
-- Maps real Ontario acute-care hospital sites.
-- Models **15,855 DA-level demand nodes**.
-- Supports observed **2021 DA age structure** from the Statistics Canada Census Profile.
-- Converts age composition into normalized relative ED-demand weights when the age artifact is present. The normalization preserves the system-wide ED utilization rate selected by the user.
-- Allocates modeled demand with a capacity-weighted **gravity / Huff model**.
-- Calculates spatial accessibility with **Enhanced Two-Step Floating Catchment Area (E2SFCA)**.
-- Evaluates candidate hospital locations using:
-  - **p-median** — minimize demand-weighted travel time
-  - **MCLP / maximum coverage** — maximize demand within a target travel time
-  - **p-center / equity** — reduce worst-case access
-  - **balanced multi-objective** — coverage + travel + system stress + access equity
-- Adds an **Erlang-C** queue-pressure proxy and seeded **Monte Carlo** capacity-shock simulation.
-- Lets an operator place a proposed hospital anywhere on the map and recalculate system metrics.
-- Supports a precomputed **OSRM fastest-road-time matrix** while preserving an explicitly labelled deterministic fallback for portable demos.
+The numbered interface regions correspond to the following functions:
 
-## Data boundary
+1. **Planning controls** set the planning year, optimization objective, access threshold, proposed bed count, proposed ED capacity and the system-wide ED utilization reference.
+2. **System KPI strip** reports modelled population, population coverage, nearest access, overloaded facilities, access equity and demand shifted to a proposed site.
+3. **Map controls** switch the capacity, demand and accessibility layers; they also change the basemap, reset the view and expose the active stress legend.
+4. **Planning map** renders dissemination-area demand nodes and hospital sites. Facility-placement mode converts a map click into a complete scenario evaluation.
+5. **Hospital detail panel** reports planning beds, ED capacity, assigned demand, load ratio, queue stress and Monte Carlo capacity-breach risk for the selected facility.
+6. **Scenario actions** enter placement mode, clear the current comparison and copy the active planning assumptions when scenario-link support is enabled.
+7. **Scenario delta panel** compares the proposed site with baseline coverage, demand coverage, nearest travel time, shifted demand and overloaded-site counts.
 
-| Type | Examples |
-|---|---|
-| **Observed public data** | StatsCan DB/DA geography and population, optional 2021 DA age counts, population anchors/projections, Ontario hospital sites, Ontario Health provincial ED benchmark |
-| **Planning model** | small-area growth allocation, normalized demographic demand, gravity/Huff assignment, E2SFCA, p-median/MCLP/p-center, queue stress |
-| **Capacity/routing proxy** | facility planning capacity where current values are not bundled and calibrated geodesic travel time when an OSRM matrix has not been generated |
+## Demand geography
 
-A production deployment should ingest authoritative facility capacity/occupancy data, patient-origin calibration data and a maintained traffic-aware routing engine.
+`data/processed/demand_nodes_da.json.gz` contains 15,855 populated dissemination-area demand nodes. The materializer starts from the 2021 Statistics Canada Geographic Attribute File, aggregates dissemination-block population to each DA and retains the published population-weighted representative coordinate. The 2021 spatial distribution is reconciled to parent 2025 population estimates and the 2050 M1 projection controls.
 
-## Architecture
+The 2025 and 2050 DA values are planning allocations. Statistics Canada does not publish those values as official DA forecasts.
 
-```text
-api/
-  main.py                    FastAPI API + static app
-core/
-  config.py                  modelling constants
-domain/
-  models.py                  demand/facility domain models
-services/
-  accessibility.py           E2SFCA
-  allocation.py              gravity / Huff assignment
-  demand.py                  normalized age-aware demand
-  geography.py               OSRM matrix adapter + fallback
-  planning.py                scenarios + scalable location optimization
-  queueing.py                Erlang-C + Monte Carlo stress
-  data_repository.py         resolution/demographic-aware loading
-scripts/
-  build_fine_grained_demand.py
-  build_age_profiles.py
-  prepare_osrm_ontario.sh
-  build_osrm_matrix.py
-data/processed/
-  regions.json               parent CD control totals/fallback
-  demand_nodes_da.json.gz    15,855-node fine-grained public demand layer
-  demand_nodes_da.meta.json  provenance/control checks
-  age_profiles_da.json.gz    optional official DA age layer
-  hospitals.json
-frontend/
-tests/
-docs/
+## Demographic demand
+
+When `data/processed/age_profiles_da.json.gz` exists, the model joins observed 2021 DA age counts and applies transparent relative ED-demand weights to four broad age groups. Those weights are normalized across the active population, so they redistribute the user-selected system-wide ED utilization rate instead of increasing aggregate demand by construction.
+
+The age weights are planning parameters rather than CIHI utilization rates. Production calibration should use Ontario patient-origin or NACRS utilization by age.
+
+## Facility allocation and accessibility
+
+Demand is allocated to hospitals with a capacity-weighted gravity/Huff model. Geographic accessibility is calculated with Enhanced Two-Step Floating Catchment Area analysis. When demographic demand is active, the age-adjusted demand distribution enters both facility allocation and the E2SFCA denominator.
+
+Candidate sites are evaluated with four objective families:
+
+- **p-median** minimizes demand-weighted nearest travel time
+- **maximum coverage** maximizes modelled demand within the selected access threshold
+- **p-center/equity** penalizes poor worst-case access and uneven accessibility
+- **balanced** combines population coverage, demand coverage, travel, facility stress and access equity
+
+With 15,855 demand nodes the optimizer first screens a geographically diverse candidate pool, then runs full system evaluations on the strongest candidates. The complete demand layer remains in every final objective calculation.
+
+## Capacity stress
+
+Facility load is compared with the planning ED-capacity field. Erlang-C provides a queue-pressure indicator and a seeded Monte Carlo routine estimates sensitivity to daily capacity shocks. These metrics are planning outputs. They are not reported hospital performance statistics.
+
+## Road travel time
+
+The runtime reads `data/processed/travel_matrix.json.gz` when a matrix is present. `scripts/prepare_osrm_ontario.sh` prepares an Ontario OpenStreetMap graph for OSRM and `scripts/build_osrm_matrix.py` creates the DA-to-hospital duration matrix in resumable batches.
+
+```bash
+bash scripts/prepare_osrm_ontario.sh
+python scripts/build_osrm_matrix.py --base-url http://127.0.0.1:5000 --resume
 ```
 
-## Run locally
+If no matrix is present, the application labels the active provider `calibrated_geodesic_proxy`. Arbitrary proposed sites also use the fallback unless their network travel times have been generated separately.
 
-Python 3.11+:
+## Public sources
+
+**Statistics Canada 2021 Geographic Attribute File — 92-151-X**  
+https://www150.statcan.gc.ca/n1/en/catalogue/92-151-x
+
+**Statistics Canada Census Profile 2021 — 98-401-X2021006**  
+https://www150.statcan.gc.ca/n1/en/catalogue/98-401-X2021006
+
+**Statistics Canada Table 17-10-0152-01 — population estimates by census division**  
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710015201
+
+**Statistics Canada Table 17-10-0162-01 — census-division and census-subdivision projections**  
+https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710016201
+
+**Ontario Ministry of Health Service Provider Locations**  
+https://data.ontario.ca/dataset/ministry-of-health-service-provider-locations-mohserlo
+
+**Ontario Health emergency-department performance reporting**  
+https://www.ontariohealth.ca/system/reporting/performance/time-spent-in-emergency-departments
+
+**CIHI NACRS emergency-department statistics**  
+https://www.cihi.ca/en/nacrs-emergency-department-visits-and-lengths-of-stay
+
+## Run locally
 
 ```bash
 python -m venv .venv
@@ -83,180 +96,15 @@ uvicorn api.main:app --reload
 
 Open `http://127.0.0.1:8000`.
 
-## Use the planner
+## Data preparation
 
-1. Choose the planning horizon and access target in the left panel. The cards and map update from the public-data planning model.
-2. To test a facility location, select **Place new hospital**, then click anywhere on the map. The model recalculates allocation, access and stress for the facility capacity inputs shown in the **New facility scenario** panel.
-3. To find candidates, choose an optimization objective and select **Find best candidate sites**. The top five ranked sites appear in the left panel; select one to model it as a scenario.
-4. Use **Clear scenario** to return to the baseline before comparing another site.
-5. Use **Copy scenario link** to share the selected coordinates and all active planning assumptions. Opening that link rebuilds the same scenario.
-
-The optimizer evaluates all 15,855 demand nodes. A run normally completes in tens of seconds on a local development machine; the interface shows the active model stage and elapsed time while it runs. On narrow screens, use **Controls** and **Details** to open the responsive side panels.
-
-## Screenshots
-
-The numbered callouts identify the main operating areas:
-
-| Callout | Area | What it does |
-|---:|---|---|
-| **1** | Planning controls | Sets the planning year, optimization objective, access target, proposed beds, ED capacity and utilization reference. |
-| **2** | System KPI ribbon | Summarizes population, coverage, nearest access, overloaded facilities, access equity and demand shifted. |
-| **3** | Map command bar | Switches the capacity, population and access layers; changes the basemap; resets the Ontario view; and explains stress colors. |
-| **4** | Interactive planning map | Shows demand nodes and hospital sites. In placement mode, selecting a point runs a complete proposed-facility scenario. |
-| **5** | System and hospital insights | Reports system demand, selected-facility load and queue stress, regional access and data provenance. |
-| **6** | Scenario actions | Copies a reproducible scenario link, enters facility-placement mode or clears the active comparison. |
-| **7** | Scenario impact | Appears after placement and compares coverage, travel time, demand shifted and overloaded sites against baseline. |
-
-Annotated baseline province-wide capacity view:
-
-![Ontario Healthcare Capacity Twin dashboard](docs/screenshots/dashboard.png)
-
-Annotated placed-facility scenario, including demand shifted and the scenario-impact panel:
-
-![Ontario Healthcare Capacity Twin placed-facility scenario](docs/screenshots/placed-facility.png)
-
-Local tests:
-
-```bash
-pytest
-```
-
-The test suite includes browser-level Playwright coverage for dashboard load, map-based facility placement and optimization results. It uses a locally installed Chrome/Edge browser when available; otherwise install Playwright Chromium once:
-
-```bash
-python -m playwright install chromium
-pytest
-```
-
-To regenerate the README screenshots:
-
-```bash
-python scripts/capture_screenshots.py
-```
-
-Docker:
-
-```bash
-docker build -t ontario-healthcare-capacity-twin .
-docker run --rm -p 8080:8080 ontario-healthcare-capacity-twin
-```
-
-This repository intentionally contains **no GitHub Actions or other CI/CD workflows**. Tests and data materialization are explicit local commands.
-
-## Public data
-
-### Small-area geography
-
-**Statistics Canada 2021 Geographic Attribute File — 92-151-X**  
-https://www150.statcan.gc.ca/n1/en/catalogue/92-151-x
-
-The GAF is dissemination-block level. The materializer aggregates observed DB population to each DA and retains StatsCan's DA identifiers and population-weighted representative coordinates.
-
-### Small-area age structure
-
-**Statistics Canada Census Profile, 2021 — 98-401-X2021006**  
-https://www150.statcan.gc.ca/n1/en/catalogue/98-401-X2021006
-
-The Census Profile provides age characteristics at the dissemination-area level. Materialize only the four broad counts required by the model:
+Build the optional age artifact from the official comprehensive Census Profile archive:
 
 ```bash
 python scripts/build_age_profiles.py --input /path/to/98-401-X2021006_eng_CSV.zip
 ```
 
-If `--input` is omitted, the script downloads the official comprehensive CSV archive from Statistics Canada. It writes:
-
-```text
-data/processed/age_profiles_da.json.gz
-data/processed/age_profiles_da.meta.json
-```
-
-The runtime automatically joins the age profile by StatsCan DGUID. DAs with suppressed/incomplete age counts remain population-only rather than receiving fabricated values.
-
-The current demographic weights are transparent **planning parameters**, not official CIHI utilization rates. They are normalized to preserve aggregate demand. Production calibration should use Ontario patient-origin/NACRS utilization by age.
-
-### Population anchors and projections
-
-**Statistics Canada Table 17-10-0152-01** — Population estimates, July 1, by census division  
-https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710015201
-
-**Statistics Canada Table 17-10-0162-01** — Projected population for census divisions and census subdivisions by projection scenario, age and gender  
-https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1710016201
-
-The POC uses the M1 medium-growth scenario at 2050 as a parent control. Projection scenarios are not deterministic predictions.
-
-### Hospital locations
-
-**Ontario Ministry of Health Service Provider Locations (MOHSERLO)**  
-https://data.ontario.ca/dataset/ministry-of-health-service-provider-locations-mohserlo
-
-### ED / hospital performance references
-
-**Ontario Health — Time Spent in Emergency Departments**  
-https://www.ontariohealth.ca/system/reporting/performance/time-spent-in-emergency-departments
-
-**CIHI — NACRS Emergency Department Visits and Lengths of Stay**  
-https://www.cihi.ca/en/nacrs-emergency-department-visits-and-lengths-of-stay
-
-CIHI publishes supplementary ED statistics by age/sex group. Those data are the preferred future calibration source for the demographic demand weights.
-
-## Real road travel time
-
-The required road graph is available from OpenStreetMap. The local preparation helper downloads the current Ontario Geofabrik extract and builds an OSRM MLD graph in Docker:
-
-```bash
-bash scripts/prepare_osrm_ontario.sh
-```
-
-Then build the DA-to-hospital matrix:
-
-```bash
-python scripts/build_osrm_matrix.py \
-  --base-url http://127.0.0.1:5000 \
-  --resume
-```
-
-The builder is batched, retryable, resumable and checkpointed. It writes:
-
-```text
-data/processed/travel_matrix.json.gz
-data/processed/travel_matrix.meta.json
-```
-
-OSRM's Table service returns fastest-route durations between each DA representative point and hospital site. The application uses those values only when the matrix is present. Proposed arbitrary sites use the fallback unless separately routed.
-
-The matrix is intentionally not committed because it is a generated road-network artifact and should be rebuilt against the routing graph/version selected by the operator.
-
-## Research basis
-
-The implementation maps to established healthcare operations-research methods:
-
-- Luo W, Qi Y. *An enhanced two-step floating catchment area (E2SFCA) method for measuring spatial accessibility to primary care physicians*. Health & Place. DOI: 10.1016/j.healthplace.2009.06.002
-- Gao F, Jaffrelot M, Deguen S. *Measuring hospital spatial accessibility using E2SFCA*. BMC Health Services Research. DOI: 10.1186/s12913-021-07046-3
-- Wang F. *Measurement, Optimization, and Impact of Health Care Accessibility: A Methodological Review*.
-- Location-allocation literature using p-median, maximum coverage and center/equity models.
-- Hoot NR et al. *Forecasting Emergency Department Crowding: A Discrete Event Simulation*.
-
-See `docs/RESEARCH.md` for references and model limitations.
-
-## Fine-grained optimizer
-
-Evaluating a full E2SFCA/capacity simulation at every DA candidate is unnecessary. The optimizer uses a transparent two-stage process:
-
-```text
-15,855 DA demand nodes
-      ↓
-demand pressure + poor-access screening
-      ↓
-≤ 140 geographically diverse candidates
-      ↓
-fast coverage/travel screen
-      ↓
-8 full model evaluations
-      ↓
-top 5 recommendations
-```
-
-The complete demand layer participates in every final objective calculation.
+The runtime joins the resulting file by StatsCan DGUID. DAs with missing or suppressed age counts remain population-only.
 
 ## API
 
@@ -269,20 +117,18 @@ POST /api/scenario
 POST /api/optimize
 ```
 
-Every response includes an `X-Request-ID` and a `Server-Timing` header for lightweight diagnostics and performance tracing.
+Responses include `X-Request-ID` and `Server-Timing` headers. `/api/state` reports the active geography resolution, routing provider and demographic-demand status.
 
-`/api/state` includes geography resolution, active routing provider and demographic-demand status. Each DA row also exposes its normalized demand multiplier.
+## Local checks
 
-## Modelling limitations
+```bash
+pytest
+```
 
-- DA 2025/2050 population values are transparent allocations of parent control totals, not official DA forecasts.
-- Observed 2021 DA age composition is held constant over the planning horizon until a small-area demographic projection adapter is supplied.
-- Age utilization weights are planning parameters until calibrated against Ontario patient-origin/NACRS data.
-- Gravity/Huff coefficients are planning parameters until calibrated to patient-origin data.
-- Capacity values remain planning proxies where authoritative facility-level data is not bundled.
-- Erlang-C is a stress indicator. Decision-grade ED operations require stage-level discrete-event simulation.
-- OSRM/OpenStreetMap fastest-road times are network-realistic but do not represent live congestion unless traffic-aware speeds are supplied.
+The repository contains no GitHub Actions or deployment workflow. Data materialization and tests are explicit local operations.
 
-## License
+## Model limits
 
-MIT.
+Facility capacity values remain planning proxies where current authoritative site-level values are not bundled. Gravity coefficients require patient-origin calibration before decision-grade use. Observed 2021 age structure is held constant through the planning horizon unless a small-area demographic projection adapter is supplied. OSRM fastest-route durations represent the road graph and configured speeds but do not represent live traffic unless traffic-aware speeds are incorporated. Erlang-C and the Monte Carlo layer are stress indicators rather than a substitute for stage-level emergency-department discrete-event simulation.
+
+`docs/RESEARCH.md` contains the location-allocation, E2SFCA and emergency-capacity references used by the implementation.
