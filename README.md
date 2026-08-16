@@ -119,14 +119,6 @@ POST /api/optimize
 
 Responses include `X-Request-ID` and `Server-Timing` headers. `/api/state` reports the active geography resolution, routing provider and demographic-demand status.
 
-## Local checks
-
-```bash
-pytest
-```
-
-The repository contains no GitHub Actions or deployment workflow. Data materialization and tests are explicit local operations.
-
 ## Model limits
 
 Facility capacity values remain planning proxies where current authoritative site-level values are not bundled. Gravity coefficients require patient-origin calibration before decision-grade use. Observed 2021 age structure is held constant through the planning horizon unless a small-area demographic projection adapter is supplied. OSRM fastest-route durations represent the road graph and configured speeds but do not represent live traffic unless traffic-aware speeds are incorporated. Erlang-C and the Monte Carlo layer are stress indicators rather than a substitute for stage-level emergency-department discrete-event simulation.
